@@ -1,153 +1,96 @@
-# CVSS Parser 
+# CVSS 解析器
 
-用Go语言实现的CVSS (Common Vulnerability Scoring System) 解析器，支持CVSS 3.x标准。
+[![Go Tests and Examples](https://github.com/scagogogo/cvss/actions/workflows/go-test.yml/badge.svg)](https://github.com/scagogogo/cvss/actions/workflows/go-test.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/scagogogo/cvss)](https://goreportcard.com/report/github.com/scagogogo/cvss)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 功能特性
+CVSS 解析器是一个 Go 语言库，用于解析、计算和处理 CVSS (通用漏洞评分系统) 向量。支持 CVSS 3.0 和 3.1 版本，提供了全面的功能以满足漏洞管理和安全评估的需求。
 
-- CVSS 3.x 向量字符串解析
-- 基础评分 (Base Score) 计算
-- 时间评分 (Temporal Score) 计算 
-- 环境评分 (Environmental Score) 计算
-- 严重性等级划分 (None, Low, Medium, High, Critical)
-- JSON格式输出
-- 向量间距离计算（欧几里得距离、曼哈顿距离、汉明距离、Jaccard相似度）
-- 命令行工具支持
+## 特性
+
+- 支持 CVSS 3.0 和 3.1 向量的解析和计算
+- 计算基础、时间和环境评分
+- 提供 JSON 输出和格式化功能
+- 向量比较和相似度计算
+- 严格模式和容错模式解析
+- 完整的文档和示例
+- 高测试覆盖率
 
 ## 安装
 
-### 从源码编译
+```bash
+go get github.com/scagogogo/cvss
+```
+
+## 快速开始
+
+解析和计算 CVSS 评分：
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    
+    "github.com/scagogogo/cvss-parser/pkg/parser"
+)
+
+func main() {
+    vectorString := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+    
+    // 解析 CVSS 向量
+    cvssVector, err := parser.ParseVector(vectorString)
+    if err != nil {
+        log.Fatalf("解析向量失败: %v", err)
+    }
+    
+    // 计算 CVSS 评分
+    score := cvssVector.Calculate()
+    
+    fmt.Printf("CVSS 评分: %.1f\n", score.BaseScore)
+    fmt.Printf("严重性: %s\n", score.Severity)
+}
+```
+
+更多示例请查看 [examples](./examples) 目录。详细的 API 文档请参考 [pkg.go.dev](https://pkg.go.dev/github.com/scagogogo/cvss).
+
+## 示例
+
+库包含一系列详细的示例，展示了不同的功能：
+
+1. [基础用法](./examples/01_basic) - 基本的 CVSS 解析和评分计算
+2. [解析不同类型的向量](./examples/02_parsing) - 展示如何解析各种 CVSS 向量字符串
+3. [JSON 输出](./examples/03_json) - 将 CVSS 对象转换为 JSON 格式
+4. [时间度量指标](./examples/04_temporal) - 使用时间度量指标及其评分影响
+5. [环境度量指标](./examples/05_environmental) - 使用环境度量指标及其评分影响
+6. [向量距离计算](./examples/06_distance) - 计算两个 CVSS 向量之间的距离
+7. [向量比较](./examples/07_vector_comparison) - 比较 CVSS 向量的方法
+8. [严重性级别](./examples/08_severity_levels) - 处理 CVSS 严重性级别
+9. [边缘案例](./examples/09_edge_cases) - 管理各种边缘情况
+
+## 持续集成
+
+本项目使用 GitHub Actions 自动运行测试和验证示例代码。CI 流程包括：
+
+- 在多个 Go 版本 (1.19, 1.20, 1.21) 上运行测试
+- 捕获和上传测试覆盖率报告
+- 编译所有示例代码以确保它们能正确构建
+- 运行基本示例以验证功能
+
+您可以在本地运行相同的测试：
 
 ```bash
-# 克隆代码库
-git clone https://github.com/scagogogo/cvss-parser.git
-cd cvss-parser
-
-# 编译
-make build
-
-# 或者直接安装到$GOPATH/bin
-make install
+make test-ci
 ```
 
-### 使用Go安装
+## 贡献
 
-```bash
-go install github.com/scagogogo/cvss-parser/cmd/cvss-cli@latest
-```
+欢迎贡献代码、报告问题和提出改进建议！请查看 [贡献指南](./docs/CONTRIBUTING.md) 了解更多信息。
 
-## 命令行工具使用
+## 许可证
 
-```bash
-# 基本用法
-cvss-cli -v1 CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
-
-# 输出详细信息
-cvss-cli -v1 CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H -detailed
-
-# 输出JSON格式
-cvss-cli -v1 CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H -json
-
-# 比较两个向量
-cvss-cli -v1 CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H -v2 CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:L -compare
-```
-
-### 命令行选项
-
-| 选项 | 说明 |
-|------|------|
-| `-v1 <向量>` | 第一个CVSS向量字符串（必需） |
-| `-v2 <向量>` | 第二个CVSS向量字符串（可选，用于比较） |
-| `-json` | 输出为JSON格式 |
-| `-detailed` | 显示详细评分信息 |
-| `-compare` | 比较两个向量（需要-v2参数） |
-| `-help` | 显示帮助信息 |
-
-## 编程接口使用示例
-
-### 基本解析与评分
-
-```go
-// 创建解析器
-p := parser.NewCvss3xParser("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
-
-// 解析CVSS向量
-cvss3x, err := p.Parse()
-if err != nil {
-    log.Fatal(err)
-}
-
-// 计算评分
-calculator := cvss.NewCalculator(cvss3x)
-score, err := calculator.Calculate()
-if err != nil {
-    log.Fatal(err)
-}
-
-// 获取严重性等级
-severity := calculator.GetSeverityRating(score)
-fmt.Printf("CVSS评分: %.1f, 严重性: %s\n", score, severity)
-```
-
-### 转换为JSON格式
-
-```go
-// 转换为JSON格式
-jsonData, err := cvss3x.ToJSON(nil)
-if err != nil {
-    log.Fatal(err)
-}
-fmt.Println(string(jsonData))
-```
-
-### 使用环境指标
-
-```go
-// 创建解析器并解析包含环境指标的CVSS向量字符串
-p := parser.NewCvss3xParser("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/CR:H/IR:M/AR:L/MAV:A/MAC:H")
-cvss3x, _ := p.Parse()
-
-// 计算评分（会自动考虑环境指标）
-calculator := cvss.NewCalculator(cvss3x)
-score, _ := calculator.Calculate()
-
-fmt.Printf("CVSS评分（含环境因素）: %.1f\n", score)
-```
-
-### 向量距离计算
-
-```go
-// 准备两个CVSS向量进行比较
-parser1 := parser.NewCvss3xParser("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
-cvss1, _ := parser1.Parse()
-
-parser2 := parser.NewCvss3xParser("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:L") 
-cvss2, _ := parser2.Parse()
-
-// 创建距离计算器
-dc := cvss.NewDistanceCalculator(cvss1, cvss2)
-
-// 计算不同类型的距离
-euclideanDist := dc.EuclideanDistance() // 欧几里得距离
-manhattanDist := dc.ManhattanDistance() // 曼哈顿距离
-hammingDist := dc.HammingDistance()     // 汉明距离
-jaccardSim := dc.JaccardSimilarity()    // Jaccard相似度
-scoreDiff := dc.ScoreDifference()       // CVSS评分差异
-
-fmt.Printf("欧几里得距离: %.4f\n", euclideanDist)
-fmt.Printf("曼哈顿距离: %.4f\n", manhattanDist)
-fmt.Printf("汉明距离: %d\n", hammingDist)
-fmt.Printf("Jaccard相似度: %.4f\n", jaccardSim)
-fmt.Printf("CVSS评分差异: %.1f\n", scoreDiff)
-```
-
-## 待实现功能
-
-- CVSS 4.0 支持
-- 宏向量 (MacroVectors) 支持
-- XML格式输出
-
-## 参考资料
-- [CVSS规范文档](https://www.first.org/cvss/specification-document)
+本项目基于 MIT 许可证 - 详情请参见 [LICENSE](LICENSE) 文件。
 
 
 
