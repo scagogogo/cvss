@@ -1,1 +1,84 @@
-.idea
+# Go相关忽略
+# 编译生成的二进制文件
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+# 测试二进制文件，由'go test -c'生成
+*.test
+# 覆盖率工具输出
+*.out
+*.prof
+*.cov
+# Go工作区文件
+go.work
+
+# 依赖目录
+vendor/
+pkg/
+
+# IDE和编辑器配置
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+*.iml
+.editorconfig
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.directory
+desktop.ini
+
+# 构建文件
+build/
+dist/
+target/
+*.log
+coverage.txt
+
+# 项目特定文件
+# CVSS项目编译结果
+cmd/cvss-cli/cvss-cli
+cvss-cli
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.bak
+
+# 环境文件
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# 依赖管理锁文件 (如果不想包含)
+# go.sum
+
+# 调试文件
+debug
+__debug_bin
