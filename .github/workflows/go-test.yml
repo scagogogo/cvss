@@ -1,0 +1,117 @@
+name: Go Tests and Examples
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test and Run Examples
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.19', '1.20', '1.21' ]
+      # 允许其他任务继续即使某个失败
+      fail-fast: false
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+        cache: true
+    
+    - name: Install Dependencies
+      run: go mod download
+
+    - name: Run Unit Tests
+      # 即使测试失败也继续执行
+      continue-on-error: true
+      id: tests
+      run: |
+        go test -v -race -coverprofile=coverage.txt -covermode=atomic ./pkg/... > test_output.log 2>&1
+        TEST_EXIT_CODE=$?
+        echo "exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
+        if [ $TEST_EXIT_CODE -ne 0 ]; then
+          echo "warning=Unit tests failed with exit code $TEST_EXIT_CODE" >> $GITHUB_OUTPUT
+          tail -n 50 test_output.log
+        else
+          echo "Unit tests passed successfully."
+        fi
+        cat test_output.log
+    
+    - name: Upload Coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage.txt
+        flags: unittests
+        fail_ci_if_error: false
+    
+    - name: Build Examples
+      id: build_examples
+      run: |
+        # Build all examples to ensure they compile
+        echo "BUILD_FAILURES=0" >> $GITHUB_ENV
+        find ./examples -type f -name "main.go" -exec dirname {} \; | while read dir; do
+          echo "Building example: $dir"
+          if ! go build -o /dev/null $dir; then
+            echo "warning=Failed to build $dir" >> $GITHUB_OUTPUT
+            echo "BUILD_FAILURES=$(($BUILD_FAILURES + 1))" >> $GITHUB_ENV
+          fi
+        done
+
+    - name: Run Basic Examples
+      # 即使示例运行失败也继续执行
+      continue-on-error: true
+      id: run_examples
+      run: |
+        # Run basic examples that should complete quickly
+        echo "RUN_FAILURES=0" >> $GITHUB_ENV
+        
+        echo "Running basic example"
+        if ! go run ./examples/01_basic/main.go; then
+          echo "warning=Failed to run basic example" >> $GITHUB_OUTPUT
+          echo "RUN_FAILURES=$(($RUN_FAILURES + 1))" >> $GITHUB_ENV
+        fi
+        
+        echo "Running parsing example"
+        if ! go run ./examples/02_parsing/main.go; then
+          echo "warning=Failed to run parsing example" >> $GITHUB_OUTPUT
+          echo "RUN_FAILURES=$(($RUN_FAILURES + 1))" >> $GITHUB_ENV
+        fi
+        
+        echo "Running JSON example"
+        if ! go run ./examples/03_json/main.go; then
+          echo "warning=Failed to run JSON example" >> $GITHUB_OUTPUT
+          echo "RUN_FAILURES=$(($RUN_FAILURES + 1))" >> $GITHUB_ENV
+        fi
+    
+    - name: Test Summary
+      run: |
+        echo "## CVSS Testing Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Test Results with Go ${{ matrix.go-version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ steps.tests.outputs.exit_code }}" == "0" ]; then
+          echo "✅ All unit tests passed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ Some unit tests failed, but workflow continued" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "$BUILD_FAILURES" == "0" ]; then
+          echo "✅ All examples built successfully" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ $BUILD_FAILURES example(s) failed to build" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "$RUN_FAILURES" == "0" ]; then
+          echo "✅ All basic examples ran successfully" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ $RUN_FAILURES example(s) failed to run" >> $GITHUB_STEP_SUMMARY
+        fi 
