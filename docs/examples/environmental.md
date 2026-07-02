@@ -439,9 +439,9 @@ func explainEnvironmentalCalculation(vector *cvss.Cvss3x) {
                    env.ModifiedPrivilegesRequired != nil ||
                    env.ModifiedUserInteraction != nil ||
                    env.ModifiedScope != nil ||
-                   env.ModifiedConfidentialityImpact != nil ||
-                   env.ModifiedIntegrityImpact != nil ||
-                   env.ModifiedAvailabilityImpact != nil
+                   env.ModifiedConfidentiality != nil ||
+                   env.ModifiedIntegrity != nil ||
+                   env.ModifiedAvailability != nil
 
     if hasModified {
         fmt.Printf("\nModified Base Metrics Present:\n")

@@ -393,7 +393,7 @@ func generateRecommendations(vector *cvss.Cvss3x) []string {
         recommendations = append(recommendations, "实施身份验证控制")
     }
     
-    if vector.Cvss3xBase.ConfidentialityImpact.GetShortValue() == 'H' {
+    if vector.Cvss3xBase.Confidentiality.GetShortValue() == 'H' {
         recommendations = append(recommendations, "加密敏感数据")
     }
     
@@ -408,9 +408,9 @@ func summarizeMetrics(vector *cvss.Cvss3x) map[string]string {
     summary["所需权限"] = vector.Cvss3xBase.PrivilegesRequired.GetLongValue()
     summary["用户交互"] = vector.Cvss3xBase.UserInteraction.GetLongValue()
     summary["作用域"] = vector.Cvss3xBase.Scope.GetLongValue()
-    summary["机密性"] = vector.Cvss3xBase.ConfidentialityImpact.GetLongValue()
-    summary["完整性"] = vector.Cvss3xBase.IntegrityImpact.GetLongValue()
-    summary["可用性"] = vector.Cvss3xBase.AvailabilityImpact.GetLongValue()
+    summary["机密性"] = vector.Cvss3xBase.Confidentiality.GetLongValue()
+    summary["完整性"] = vector.Cvss3xBase.Integrity.GetLongValue()
+    summary["可用性"] = vector.Cvss3xBase.Availability.GetLongValue()
     
     return summary
 }

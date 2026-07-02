@@ -25,6 +25,7 @@ import (
 
     "github.com/scagogogo/cvss-skills/pkg/cvss"
     "github.com/scagogogo/cvss-skills/pkg/parser"
+    "github.com/scagogogo/cvss-skills/pkg/vector"
 )
 
 func main() {
@@ -120,14 +121,14 @@ func compareVectorsDetailed(v1, v2 *cvss.Cvss3x) {
         v1.Cvss3xBase.Scope, 
         v2.Cvss3xBase.Scope)
     compareMetric("机密性影响", 
-        v1.Cvss3xBase.ConfidentialityImpact, 
-        v2.Cvss3xBase.ConfidentialityImpact)
+        v1.Cvss3xBase.Confidentiality, 
+        v2.Cvss3xBase.Confidentiality)
     compareMetric("完整性影响", 
-        v1.Cvss3xBase.IntegrityImpact, 
-        v2.Cvss3xBase.IntegrityImpact)
+        v1.Cvss3xBase.Integrity, 
+        v2.Cvss3xBase.Integrity)
     compareMetric("可用性影响", 
-        v1.Cvss3xBase.AvailabilityImpact, 
-        v2.Cvss3xBase.AvailabilityImpact)
+        v1.Cvss3xBase.Availability, 
+        v2.Cvss3xBase.Availability)
 
     // 比较分数
     calc1 := cvss.NewCalculator(v1)
@@ -253,9 +254,9 @@ func createMetricComparisonMatrix(vectors []*cvss.Cvss3x) {
         {"PR", func(v *cvss.Cvss3x) vector.Vector { return v.Cvss3xBase.PrivilegesRequired }},
         {"UI", func(v *cvss.Cvss3x) vector.Vector { return v.Cvss3xBase.UserInteraction }},
         {"S", func(v *cvss.Cvss3x) vector.Vector { return v.Cvss3xBase.Scope }},
-        {"C", func(v *cvss.Cvss3x) vector.Vector { return v.Cvss3xBase.ConfidentialityImpact }},
-        {"I", func(v *cvss.Cvss3x) vector.Vector { return v.Cvss3xBase.IntegrityImpact }},
-        {"A", func(v *cvss.Cvss3x) vector.Vector { return v.Cvss3xBase.AvailabilityImpact }},
+        {"C", func(v *cvss.Cvss3x) vector.Vector { return v.Cvss3xBase.Confidentiality }},
+        {"I", func(v *cvss.Cvss3x) vector.Vector { return v.Cvss3xBase.Integrity }},
+        {"A", func(v *cvss.Cvss3x) vector.Vector { return v.Cvss3xBase.Availability }},
     }
 
     // 打印标题
@@ -473,9 +474,9 @@ func calculateExploitabilityScore(vector *cvss.Cvss3x) float64 {
 
 func calculateImpactScore(vector *cvss.Cvss3x) float64 {
     // 简化的影响计算
-    c := vector.Cvss3xBase.ConfidentialityImpact.GetScore()
-    i := vector.Cvss3xBase.IntegrityImpact.GetScore()
-    a := vector.Cvss3xBase.AvailabilityImpact.GetScore()
+    c := vector.Cvss3xBase.Confidentiality.GetScore()
+    i := vector.Cvss3xBase.Integrity.GetScore()
+    a := vector.Cvss3xBase.Availability.GetScore()
     
     return 6.42 * (1 - (1-c) * (1-i) * (1-a))
 }
@@ -541,9 +542,9 @@ func compareRiskProfiles(vectors []*cvss.Cvss3x) {
             Privileges:   vector.Cvss3xBase.PrivilegesRequired.GetLongValue(),
             Interaction:  vector.Cvss3xBase.UserInteraction.GetLongValue(),
             CIAImpact:    fmt.Sprintf("%c/%c/%c",
-                vector.Cvss3xBase.ConfidentialityImpact.GetShortValue(),
-                vector.Cvss3xBase.IntegrityImpact.GetShortValue(),
-                vector.Cvss3xBase.AvailabilityImpact.GetShortValue()),
+                vector.Cvss3xBase.Confidentiality.GetShortValue(),
+                vector.Cvss3xBase.Integrity.GetShortValue(),
+                vector.Cvss3xBase.Availability.GetShortValue()),
         }
     }
     

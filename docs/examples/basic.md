@@ -84,16 +84,16 @@ func main() {
         parsedVector.Cvss3xBase.Scope.GetDescription())
     
     fmt.Printf("Confidentiality Impact: %s (%s)\n", 
-        parsedVector.Cvss3xBase.ConfidentialityImpact.GetLongValue(),
-        parsedVector.Cvss3xBase.ConfidentialityImpact.GetDescription())
+        parsedVector.Cvss3xBase.Confidentiality.GetLongValue(),
+        parsedVector.Cvss3xBase.Confidentiality.GetDescription())
     
     fmt.Printf("Integrity Impact: %s (%s)\n", 
-        parsedVector.Cvss3xBase.IntegrityImpact.GetLongValue(),
-        parsedVector.Cvss3xBase.IntegrityImpact.GetDescription())
+        parsedVector.Cvss3xBase.Integrity.GetLongValue(),
+        parsedVector.Cvss3xBase.Integrity.GetDescription())
     
     fmt.Printf("Availability Impact: %s (%s)\n", 
-        parsedVector.Cvss3xBase.AvailabilityImpact.GetLongValue(),
-        parsedVector.Cvss3xBase.AvailabilityImpact.GetDescription())
+        parsedVector.Cvss3xBase.Availability.GetLongValue(),
+        parsedVector.Cvss3xBase.Availability.GetDescription())
 }
 ```
 

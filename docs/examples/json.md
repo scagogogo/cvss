@@ -393,7 +393,7 @@ func generateRecommendations(vector *cvss.Cvss3x) []string {
         recommendations = append(recommendations, "Implement authentication controls")
     }
     
-    if vector.Cvss3xBase.ConfidentialityImpact.GetShortValue() == 'H' {
+    if vector.Cvss3xBase.Confidentiality.GetShortValue() == 'H' {
         recommendations = append(recommendations, "Encrypt sensitive data")
     }
     
@@ -408,9 +408,9 @@ func summarizeMetrics(vector *cvss.Cvss3x) map[string]string {
     summary["Privileges Required"] = vector.Cvss3xBase.PrivilegesRequired.GetLongValue()
     summary["User Interaction"] = vector.Cvss3xBase.UserInteraction.GetLongValue()
     summary["Scope"] = vector.Cvss3xBase.Scope.GetLongValue()
-    summary["Confidentiality"] = vector.Cvss3xBase.ConfidentialityImpact.GetLongValue()
-    summary["Integrity"] = vector.Cvss3xBase.IntegrityImpact.GetLongValue()
-    summary["Availability"] = vector.Cvss3xBase.AvailabilityImpact.GetLongValue()
+    summary["Confidentiality"] = vector.Cvss3xBase.Confidentiality.GetLongValue()
+    summary["Integrity"] = vector.Cvss3xBase.Integrity.GetLongValue()
+    summary["Availability"] = vector.Cvss3xBase.Availability.GetLongValue()
     
     return summary
 }
