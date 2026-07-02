@@ -31,8 +31,7 @@ func BenchmarkVectorParsing(b *testing.B) {
     
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
-        parser := parser.NewCvss3xParser(vectorStr)
-        _, err := parser.Parse()
+        _, err := parser.ParseString(vectorStr)
         if err != nil {
             b.Fatal(err)
         }
@@ -41,8 +40,7 @@ func BenchmarkVectorParsing(b *testing.B) {
 
 func BenchmarkScoreCalculation(b *testing.B) {
     vectorStr := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, _ := parser.Parse()
+    vector, _ := parser.ParseString(vectorStr)
     
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
@@ -59,8 +57,7 @@ func BenchmarkEndToEnd(b *testing.B) {
     
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             b.Fatal(err)
         }
@@ -84,8 +81,7 @@ func BenchmarkMemoryAllocation(b *testing.B) {
     b.ResetTimer()
     
     for i := 0; i < b.N; i++ {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         calculator := cvss.NewCalculator(vector)
         calculator.Calculate()
     }
@@ -94,41 +90,20 @@ func BenchmarkMemoryAllocation(b *testing.B) {
 
 ## 内存优化
 
-### 对象池化
+### 按调用构造
+
+`Cvss3xParser` 在构造时绑定输入字符串，`Calculator` 在构造时绑定向量——两者都不可重新绑定，因此对象池没有任何收益。每次调用构造新实例即可，它们很轻量：
 
 ```go
-import "sync"
-
-var parserPool = sync.Pool{
-    New: func() interface{} {
-        return parser.NewCvss3xParser("")
-    },
-}
-
-var calculatorPool = sync.Pool{
-    New: func() interface{} {
-        return &cvss.Calculator{}
-    },
-}
-
 func ProcessVectorOptimized(vectorStr string) (float64, error) {
-    // 从池中获取解析器
-    p := parserPool.Get().(*parser.Cvss3xParser)
-    defer parserPool.Put(p)
-    
-    // 重置并使用解析器
-    p.SetVector(vectorStr)
-    vector, err := p.Parse()
+    // 每次调用构造全新解析器（解析器在构造时绑定字符串）
+    vector, err := parser.ParseString(vectorStr)
     if err != nil {
         return 0, err
     }
-    
-    // 从池中获取计算器
-    calc := calculatorPool.Get().(*cvss.Calculator)
-    defer calculatorPool.Put(calc)
-    
-    // 重置并使用计算器
-    calc.SetVector(vector)
+
+    // 每次调用构造全新计算器（计算器在构造时绑定向量）
+    calc := cvss.NewCalculator(vector)
     return calc.Calculate()
 }
 ```
@@ -279,8 +254,7 @@ func parseVectorsPipeline(vectors []string) <-chan ParsedVector {
         defer close(parsed)
         
         for i, vectorStr := range vectors {
-            parser := parser.NewCvss3xParser(vectorStr)
-            vector, err := parser.Parse()
+            vector, err := parser.ParseString(vectorStr)
             
             parsed <- ParsedVector{
                 Vector: vector,

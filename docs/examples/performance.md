@@ -31,8 +31,7 @@ func BenchmarkVectorParsing(b *testing.B) {
     
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
-        parser := parser.NewCvss3xParser(vectorStr)
-        _, err := parser.Parse()
+        _, err := parser.ParseString(vectorStr)
         if err != nil {
             b.Fatal(err)
         }
@@ -41,8 +40,7 @@ func BenchmarkVectorParsing(b *testing.B) {
 
 func BenchmarkScoreCalculation(b *testing.B) {
     vectorStr := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, _ := parser.Parse()
+    vector, _ := parser.ParseString(vectorStr)
     
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
@@ -59,8 +57,7 @@ func BenchmarkEndToEnd(b *testing.B) {
     
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             b.Fatal(err)
         }
@@ -84,8 +81,7 @@ func BenchmarkMemoryAllocation(b *testing.B) {
     b.ResetTimer()
     
     for i := 0; i < b.N; i++ {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         calculator := cvss.NewCalculator(vector)
         calculator.Calculate()
     }
@@ -94,41 +90,22 @@ func BenchmarkMemoryAllocation(b *testing.B) {
 
 ## Memory Optimization
 
-### Object Pooling
+### Per-Call Construction
+
+`Cvss3xParser` binds its input string at construction and `Calculator`
+binds its vector at construction — neither is rebindable, so an object
+pool gains nothing. Construct fresh instances per call; they are cheap:
 
 ```go
-import "sync"
-
-var parserPool = sync.Pool{
-    New: func() interface{} {
-        return parser.NewCvss3xParser("")
-    },
-}
-
-var calculatorPool = sync.Pool{
-    New: func() interface{} {
-        return &cvss.Calculator{}
-    },
-}
-
 func ProcessVectorOptimized(vectorStr string) (float64, error) {
-    // Get parser from pool
-    p := parserPool.Get().(*parser.Cvss3xParser)
-    defer parserPool.Put(p)
-    
-    // Reset and use parser
-    p.SetVector(vectorStr)
-    vector, err := p.Parse()
+    // Fresh parser per call (parser binds the string at construction)
+    vector, err := parser.ParseString(vectorStr)
     if err != nil {
         return 0, err
     }
-    
-    // Get calculator from pool
-    calc := calculatorPool.Get().(*cvss.Calculator)
-    defer calculatorPool.Put(calc)
-    
-    // Reset and use calculator
-    calc.SetVector(vector)
+
+    // Fresh calculator per call (calculator binds the vector at construction)
+    calc := cvss.NewCalculator(vector)
     return calc.Calculate()
 }
 ```
@@ -279,8 +256,7 @@ func parseVectorsPipeline(vectors []string) <-chan ParsedVector {
         defer close(parsed)
         
         for i, vectorStr := range vectors {
-            parser := parser.NewCvss3xParser(vectorStr)
-            vector, err := parser.Parse()
+            vector, err := parser.ParseString(vectorStr)
             
             parsed <- ParsedVector{
                 Vector: vector,
