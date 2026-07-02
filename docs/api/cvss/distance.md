@@ -26,8 +26,8 @@ flowchart LR
 Euclidean / Manhattan / Hamming / ScoreDifference return **distances** (0 = identical, larger = more different). Jaccard returns a **similarity** (1 = identical, 0 = disjoint). Pick per use case: clustering favors distances, deduplication favors similarity.
 :::
 
-::: info Environment-aware variants
-Each metric that considers metric *values* also has a `…WithEnv` variant (e.g. `EuclideanDistanceWithEnv`) that substitutes modified environmental metrics when present. There are also `…Checked` variants (e.g. `EuclideanDistanceChecked`) that return `(float64, error)` instead of a bare `float64`.
+::: info All metrics use base values
+The distance metrics compare the **base** metric values of the two vectors. Environmental and temporal metrics are not part of the distance computation. If you need to compare scores that account for environmental modifiers, compute each vector's `GetEnvironmentalScore()` and take their absolute difference yourself.
 :::
 
 ## Type Definition
@@ -41,26 +41,16 @@ type DistanceCalculator struct {
 
 func NewDistanceCalculator(vector1, vector2 *Cvss3x) *DistanceCalculator
 
-// Value-based metrics
 func (dc *DistanceCalculator) EuclideanDistance() float64
 func (dc *DistanceCalculator) ManhattanDistance() float64
 func (dc *DistanceCalculator) HammingDistance() int
 func (dc *DistanceCalculator) JaccardSimilarity() float64
 func (dc *DistanceCalculator) ScoreDifference() float64
-
-// Environment-aware variants (use modified metrics when present)
-func (dc *DistanceCalculator) EuclideanDistanceWithEnv() float64
-func (dc *DistanceCalculator) ManhattanDistanceWithEnv() float64
-func (dc *DistanceCalculator) HammingDistanceWithEnv() int
-func (dc *DistanceCalculator) JaccardSimilarityWithEnv() float64
-
-// Checked variants (return an error instead of a silent 0)
-func (dc *DistanceCalculator) EuclideanDistanceChecked() (float64, error)
-func (dc *DistanceCalculator) ManhattanDistanceChecked() (float64, error)
-func (dc *DistanceCalculator) ScoreDifferenceChecked() (float64, error)
-func (dc *DistanceCalculator) EuclideanDistanceWithEnvChecked() (float64, error)
-func (dc *DistanceCalculator) ManhattanDistanceWithEnvChecked() (float64, error)
 ```
+
+::: warning No `Checked` or `WithEnv` variants
+The distance methods return bare `float64` (or `int` for `HammingDistance`) and have no error-returning or environment-aware variants. A nil receiver or nil vector yields a `0` result silently — validate your inputs before constructing the calculator if you need to guard against that (see [Error Handling](#error-handling)).
+:::
 
 ## Creating a Calculator
 
@@ -487,42 +477,46 @@ func interpretDistance(distance float64, algorithm string) string {
 
 ## Performance Optimization
 
-## Performance Optimization
-
 ### Cached Pairwise Calculation
 
-`DistanceCalculator` holds no mutable state, but re-deriving the same pair repeatedly wastes work. A small cache keyed by vector pair gives O(1) repeat lookups; the `…Checked` variants surface parse/scoring errors instead of silently returning 0:
+`DistanceCalculator` holds no mutable state, but re-deriving the same pair repeatedly wastes work. A small application-level cache keyed by the vector-pair index gives O(1) repeat lookups. Since the distance methods return bare `float64` (no error variant), validate the vectors once up front, then cache freely:
 
 ```go
-type PairCache struct {
+// Application-level pair cache; the library does not provide one.
+type pairCache struct {
     vectors []*cvss.Cvss3x
     cache   map[[2]int]float64
 }
 
-func NewPairCache(vectors []*cvss.Cvss3x) *PairCache {
-    return &PairCache{vectors: vectors, cache: make(map[[2]int]float64)}
+func newPairCache(vectors []*cvss.Cvss3x) (*pairCache, error) {
+    // Validate once up front so cached lookups never see a bad vector.
+    for _, v := range vectors {
+        if v == nil {
+            return nil, fmt.Errorf("nil vector in input")
+        }
+        if err := v.Check(); err != nil {
+            return nil, fmt.Errorf("invalid vector %s: %w", v.String(), err)
+        }
+    }
+    return &pairCache{vectors: vectors, cache: make(map[[2]int]float64)}, nil
 }
 
 // Euclidean returns the cached Euclidean distance for the pair (i, j),
 // computing it on first access. Unordered: (i,j) and (j,i) share one entry.
-func (c *PairCache) Euclidean(i, j int) (float64, error) {
+func (c *pairCache) Euclidean(i, j int) float64 {
     if i == j {
-        return 0, nil
+        return 0
     }
     if i > j {
         i, j = j, i
     }
     key := [2]int{i, j}
     if d, ok := c.cache[key]; ok {
-        return d, nil
+        return d
     }
-    calc := cvss.NewDistanceCalculator(c.vectors[i], c.vectors[j])
-    d, err := calc.EuclideanDistanceChecked()
-    if err != nil {
-        return 0, err
-    }
+    d := cvss.NewDistanceCalculator(c.vectors[i], c.vectors[j]).EuclideanDistance()
     c.cache[key] = d
-    return d, nil
+    return d
 }
 ```
 

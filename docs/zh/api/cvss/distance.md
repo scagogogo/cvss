@@ -26,8 +26,8 @@ flowchart LR
 欧氏 / 曼哈顿 / 汉明 / 评分差返回**距离**（0 表示完全相同，越大越不同）；Jaccard 返回**相似度**（1 表示完全相同，0 表示完全不相交）。按场景选择：聚类偏向距离，去重偏向相似度。
 :::
 
-::: info 环境感知变体
-凡考虑指标*取值*的度量，均有 `…WithEnv` 变体（如 `EuclideanDistanceWithEnv`），在存在修正后的环境指标时改用修正值。另有 `…Checked` 变体（如 `EuclideanDistanceChecked`），返回 `(float64, error)` 而非裸 `float64`。
+::: info 所有度量均使用基础值
+距离度量比较两个向量的**基础**指标取值。时间与环境指标不参与距离计算。若需比较考虑环境修正后的评分，请自行计算各向量的 `GetEnvironmentalScore()` 再取绝对差。
 :::
 
 ## 类型定义
@@ -41,26 +41,16 @@ type DistanceCalculator struct {
 
 func NewDistanceCalculator(vector1, vector2 *Cvss3x) *DistanceCalculator
 
-// 基于取值的度量
 func (dc *DistanceCalculator) EuclideanDistance() float64
 func (dc *DistanceCalculator) ManhattanDistance() float64
 func (dc *DistanceCalculator) HammingDistance() int
 func (dc *DistanceCalculator) JaccardSimilarity() float64
 func (dc *DistanceCalculator) ScoreDifference() float64
-
-// 环境感知变体（存在修正指标时改用修正值）
-func (dc *DistanceCalculator) EuclideanDistanceWithEnv() float64
-func (dc *DistanceCalculator) ManhattanDistanceWithEnv() float64
-func (dc *DistanceCalculator) HammingDistanceWithEnv() int
-func (dc *DistanceCalculator) JaccardSimilarityWithEnv() float64
-
-// Checked 变体（返回 error 而非静默返回 0）
-func (dc *DistanceCalculator) EuclideanDistanceChecked() (float64, error)
-func (dc *DistanceCalculator) ManhattanDistanceChecked() (float64, error)
-func (dc *DistanceCalculator) ScoreDifferenceChecked() (float64, error)
-func (dc *DistanceCalculator) EuclideanDistanceWithEnvChecked() (float64, error)
-func (dc *DistanceCalculator) ManhattanDistanceWithEnvChecked() (float64, error)
 ```
+
+::: warning 没有 `Checked` 或 `WithEnv` 变体
+距离方法返回裸 `float64`（`HammingDistance` 返回 `int`），没有返回错误或环境感知的变体。nil 接收者或 nil 向量会静默返回 `0` —— 若需防范，请在构造计算器前自行校验输入（见[错误处理](#错误处理)）。
+:::
 
 ## 创建计算器
 
@@ -338,38 +328,44 @@ func analyzeSimilarity(v1, v2 *cvss.Cvss3x) {
 
 ### 带缓存的成对计算
 
-`DistanceCalculator` 不持有可变状态，但反复重算同一向量对是浪费。用按向量对索引的小缓存可实现 O(1) 重复查询；`…Checked` 变体会暴露解析/评分错误，而非静默返回 0：
+`DistanceCalculator` 不持有可变状态，但反复重算同一向量对是浪费。用按向量对索引的应用层小缓存可实现 O(1) 重复查询。由于距离方法返回裸 `float64`（无 error 变体），先一次性校验所有向量，之后即可放心缓存：
 
 ```go
-type PairCache struct {
+// 应用层向量对缓存；库不提供。
+type pairCache struct {
     vectors []*cvss.Cvss3x
     cache   map[[2]int]float64
 }
 
-func NewPairCache(vectors []*cvss.Cvss3x) *PairCache {
-    return &PairCache{vectors: vectors, cache: make(map[[2]int]float64)}
+func newPairCache(vectors []*cvss.Cvss3x) (*pairCache, error) {
+    // 先一次性校验，确保缓存查询永不遇到坏向量。
+    for _, v := range vectors {
+        if v == nil {
+            return nil, fmt.Errorf("nil vector in input")
+        }
+        if err := v.Check(); err != nil {
+            return nil, fmt.Errorf("invalid vector %s: %w", v.String(), err)
+        }
+    }
+    return &pairCache{vectors: vectors, cache: make(map[[2]int]float64)}, nil
 }
 
 // Euclidean 返回向量对 (i, j) 的缓存欧氏距离，首次访问时计算。
 // 顺序无关：(i,j) 与 (j,i) 共享同一缓存项。
-func (c *PairCache) Euclidean(i, j int) (float64, error) {
+func (c *pairCache) Euclidean(i, j int) float64 {
     if i == j {
-        return 0, nil
+        return 0
     }
     if i > j {
         i, j = j, i
     }
     key := [2]int{i, j}
     if d, ok := c.cache[key]; ok {
-        return d, nil
+        return d
     }
-    calc := cvss.NewDistanceCalculator(c.vectors[i], c.vectors[j])
-    d, err := calc.EuclideanDistanceChecked()
-    if err != nil {
-        return 0, err
-    }
+    d := cvss.NewDistanceCalculator(c.vectors[i], c.vectors[j]).EuclideanDistance()
     c.cache[key] = d
-    return d, nil
+    return d
 }
 ```
 
