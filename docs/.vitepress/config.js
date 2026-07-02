@@ -157,7 +157,9 @@ export default withMermaid(defineConfig({
                   text: '指南',
                   collapsed: true,
                   items: [
-                    { text: '错误处理', link: '/zh/api/error-handling' }
+                    { text: '错误处理', link: '/zh/api/error-handling' },
+                    { text: '性能优化', link: '/zh/api/performance' },
+                    { text: '测试', link: '/zh/api/testing' }
                   ]
                 }
               ]

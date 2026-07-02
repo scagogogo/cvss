@@ -1,41 +1,41 @@
-# Testing Guide
+# 测试指南
 
-This comprehensive guide covers testing strategies, patterns, and best practices for applications using CVSS Skills.
+本指南全面介绍使用 CVSS Skills 的应用之测试策略、模式与最佳实践。
 
-## Overview
+## 概述
 
-Effective testing ensures:
+有效的测试确保：
 
-- Correct CVSS parsing and calculation
-- Reliable error handling
-- Performance under load
-- Security vulnerability detection
-- Compliance with requirements
+- CVSS 解析与计算正确
+- 错误处理可靠
+- 负载下的性能
+- 安全漏洞检测
+- 需求合规
 
-## Testing Strategy
+## 测试策略
 
-### Test Pyramid
+### 测试金字塔
 
 ```
     /\
-   /  \    E2E Tests (Few)
+   /  \    端到端测试（少量）
   /____\
- /      \   Integration Tests (Some)
-/________\  Unit Tests (Many)
+ /      \   集成测试（适量）
+/________\  单元测试（大量）
 ```
 
-### Test Categories
+### 测试分类
 
-1. **Unit Tests** - Individual functions and methods
-2. **Integration Tests** - Component interactions
-3. **End-to-End Tests** - Complete workflows
-4. **Performance Tests** - Load and stress testing
-5. **Security Tests** - Vulnerability scanning
-6. **Compliance Tests** - Regulatory requirements
+1. **单元测试** - 单个函数与方法
+2. **集成测试** - 组件间交互
+3. **端到端测试** - 完整工作流
+4. **性能测试** - 负载与压力测试
+5. **安全测试** - 漏洞扫描
+6. **合规测试** - 法规要求
 
-## Unit Testing
+## 单元测试
 
-### Basic Unit Tests
+### 基础单元测试
 
 ```go
 package cvss_test
@@ -101,10 +101,10 @@ func TestVectorParsing(t *testing.T) {
 }
 ```
 
-### Test Fixtures and Helpers
+### 测试夹具与辅助函数
 
 ```go
-// Test fixtures for common test data
+// 常用测试数据的测试夹具
 type TestFixtures struct {
     ValidVectors   []string
     InvalidVectors []string
@@ -131,7 +131,7 @@ func NewTestFixtures() *TestFixtures {
     }
 }
 
-// Test helpers
+// 测试辅助函数
 func parseVector(t *testing.T, vectorStr string) *cvss.Cvss3x {
     t.Helper()
 
@@ -159,7 +159,7 @@ func assertScoreInRange(t *testing.T, score, min, max float64) {
 }
 ```
 
-### Property-Based Testing
+### 基于属性的测试
 
 ```go
 import "github.com/leanovate/gopter"
@@ -169,7 +169,7 @@ import "github.com/leanovate/gopter/prop"
 func TestCVSSProperties(t *testing.T) {
     properties := gopter.NewProperties(nil)
 
-    // Property: All valid CVSS vectors should produce scores between 0.0 and 10.0
+    // 属性：所有合法 CVSS 向量的评分应在 0.0 到 10.0 之间
     properties.Property("CVSS scores are in valid range", prop.ForAll(
         func(av, ac, pr, ui, s, c, i, a string) bool {
             vector := fmt.Sprintf("CVSS:3.1/AV:%s/AC:%s/PR:%s/UI:%s/S:%s/C:%s/I:%s/A:%s",
@@ -177,7 +177,7 @@ func TestCVSSProperties(t *testing.T) {
             
             parsedVector, err := parser.ParseString(vector)
             if err != nil {
-                return true // Invalid vectors are expected to fail
+                return true // 非法向量预期会失败
             }            
             calculator := cvss.NewCalculator(parsedVector)
             score, err := calculator.Calculate()
@@ -197,7 +197,7 @@ func TestCVSSProperties(t *testing.T) {
         gen.OneConstOf("N", "L", "H"),          // A
     ))
 
-    // Property: Higher impact should generally result in higher scores
+    // 属性：更高的影响通常导致更高的评分
     properties.Property("Higher impact increases score", prop.ForAll(
         func() bool {
             baseVector := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:%s/I:%s/A:%s"
@@ -216,13 +216,13 @@ func TestCVSSProperties(t *testing.T) {
 }
 ```
 
-## Integration Testing
+## 集成测试
 
-### Component Integration
+### 组件集成
 
 ```go
 func TestCVSSServiceIntegration(t *testing.T) {
-    // Setup test service
+    // 搭建测试服务
     service := setupTestService(t)
     defer teardownTestService(service)
 
@@ -262,7 +262,7 @@ func setupTestService(t *testing.T) *CVSSService {
 }
 ```
 
-### Database Integration
+### 数据库集成
 
 ```go
 func TestDatabaseIntegration(t *testing.T) {
@@ -300,9 +300,9 @@ func TestDatabaseIntegration(t *testing.T) {
 }
 ```
 
-## End-to-End Testing
+## 端到端测试
 
-### HTTP API Testing
+### HTTP API 测试
 
 ```go
 func TestHTTPAPIEndToEnd(t *testing.T) {
@@ -366,28 +366,28 @@ func TestHTTPAPIEndToEnd(t *testing.T) {
 }
 ```
 
-## Testing Error Conditions
+## 错误条件测试
 
-Test the real error shapes: parse sentinels via `errors.Is`, and validation via `errors.As` on `cvss.ValidationErrors` (see [Error Handling](/api/error-handling)).
+测试真实的错误形态：解析哨兵错误用 `errors.Is`，校验用 `cvss.ValidationErrors` 上的 `errors.As`（见[错误处理](/zh/api/error-handling)）。
 
 ```go
 func TestParseSentinelErrors(t *testing.T) {
-    // Missing CVSS: prefix
+    // 缺少 CVSS: 前缀
     _, err := parser.ParseString("not-a-vector")
     assert.ErrorIs(t, err, parser.ErrParserMagicHead)
 
-    // Duplicate metric key (AV appears twice)
+    // 重复指标键（AV 出现两次）
     _, err = parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/AV:P")
     assert.ErrorIs(t, err, parser.ErrDuplicateMetric)
 
-    // Unknown metric value -> plain fmt.Errorf (not a sentinel)
+    // 未知指标值 -> 普通 fmt.Errorf（非哨兵）
     _, err = parser.ParseString("CVSS:3.1/AV:X/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
     require.Error(t, err)
     assert.False(t, errors.Is(err, parser.ErrParserMagicHead))
 }
 
 func TestValidationReportsAllMissingMetrics(t *testing.T) {
-    // Parses fine, but is missing C/I/A base metrics
+    // 解析正常，但缺少 C/I/A 基础指标
     cv, err := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U")
     require.NoError(t, err)
 
@@ -398,7 +398,7 @@ func TestValidationReportsAllMissingMetrics(t *testing.T) {
     require.True(t, errors.As(err, &ve))
     assert.ElementsMatch(t, []string{"C", "I", "A"}, ve.MissingMetrics())
 
-    // Calculate() surfaces the same incompleteness via Check()'s error
+    // Calculate() 通过 Check() 的错误暴露同样的不完整性
     _, err = cvss.NewCalculator(cv).Calculate()
     require.Error(t, err)
 }
@@ -419,9 +419,9 @@ func TestParseDoesNotPanicOnMalformedInput(t *testing.T) {
 }
 ```
 
-## Performance Testing
+## 性能测试
 
-### Benchmark Tests
+### 基准测试
 
 ```go
 func BenchmarkVectorProcessing(b *testing.B) {
@@ -454,7 +454,7 @@ func BenchmarkConcurrentProcessing(b *testing.B) {
 }
 ```
 
-### Load Testing
+### 负载测试
 
 ```go
 func TestLoadHandling(t *testing.T) {
@@ -465,14 +465,14 @@ func TestLoadHandling(t *testing.T) {
     server := setupTestServer(t)
     defer server.Close()
 
-    // Test configuration
+    // 测试配置
     concurrency := 50
     requests := 1000
     timeout := 30 * time.Second
 
     results := make(chan TestResult, requests)
     
-    // Start load test
+    // 开始负载测试
     start := time.Now()
     
     for i := 0; i < concurrency; i++ {
@@ -486,7 +486,7 @@ func TestLoadHandling(t *testing.T) {
         }()
     }
 
-    // Collect results
+    // 收集结果
     var successful, failed int
     var totalDuration time.Duration
     
@@ -506,7 +506,7 @@ func TestLoadHandling(t *testing.T) {
 
     duration := time.Since(start)
     
-    // Assertions
+    // 断言
     successRate := float64(successful) / float64(requests) * 100
     avgDuration := totalDuration / time.Duration(successful)
     requestsPerSecond := float64(requests) / duration.Seconds()
@@ -532,40 +532,40 @@ type TestResult struct {
 }
 ```
 
-## Security Testing
+## 安全测试
 
-### Input Validation Testing
+### 输入校验测试
 
 ```go
 func TestSecurityInputValidation(t *testing.T) {
     maliciousInputs := []string{
-        // SQL injection attempts
+        // SQL 注入尝试
         "'; DROP TABLE vectors; --",
         "CVSS:3.1/AV:N'; DELETE FROM users; --",
         
-        // XSS attempts
+        // XSS 尝试
         "<script>alert('xss')</script>",
         "CVSS:3.1/AV:<script>alert(1)</script>",
         
-        // Path traversal
+        // 路径遍历
         "../../../etc/passwd",
         "CVSS:3.1/AV:../../../etc/passwd",
         
-        // Buffer overflow attempts
+        // 缓冲区溢出尝试
         strings.Repeat("A", 10000),
         "CVSS:3.1/" + strings.Repeat("AV:N/", 1000),
         
-        // Null bytes
+        // 空字节
         "CVSS:3.1/AV:N\x00/AC:L",
         
-        // Unicode attacks
-        "CVSS:3.1/AV:N\u202e/AC:L",
+        // Unicode 攻击
+        "CVSS:3.1/AV:N‮/AC:L",
     }
 
     for _, input := range maliciousInputs {
         t.Run(fmt.Sprintf("Malicious input: %s", truncateString(input, 50)), func(t *testing.T) {
-            // Should either return an error or handle gracefully
-            // Should never cause panic or security issues
+            // 应返回错误或优雅处理
+            // 绝不应导致 panic 或安全问题
             assert.NotPanics(t, func() {
                 _, _ = parser.ParseString(input)
             })
@@ -579,7 +579,7 @@ func TestRateLimiting(t *testing.T) {
 
     client := &http.Client{Timeout: 5 * time.Second}
     
-    // Send requests rapidly to trigger rate limiting
+    // 快速发送请求以触发速率限制
     var responses []int
     for i := 0; i < 100; i++ {
         resp, err := client.Get(server.URL + "/api/v1/health")
@@ -590,7 +590,7 @@ func TestRateLimiting(t *testing.T) {
         resp.Body.Close()
     }
 
-    // Should see some 429 (Too Many Requests) responses
+    // 应看到一些 429（Too Many Requests）响应
     rateLimited := 0
     for _, status := range responses {
         if status == 429 {
@@ -602,9 +602,9 @@ func TestRateLimiting(t *testing.T) {
 }
 ```
 
-## Test Data Management
+## 测试数据管理
 
-### Test Data Generation
+### 测试数据生成
 
 ```go
 func generateTestVectors(count int) []string {
@@ -653,9 +653,9 @@ type TestCase struct {
 }
 ```
 
-## Test Automation
+## 测试自动化
 
-### CI/CD Integration
+### CI/CD 集成
 
 ```yaml
 # .github/workflows/test.yml
@@ -712,7 +712,7 @@ jobs:
         file: ./coverage.out
 ```
 
-### Test Reporting
+### 测试报告
 
 ```go
 func generateTestReport(results []TestResult) *TestReport {
@@ -758,40 +758,40 @@ type TestSummary struct {
 }
 ```
 
-## Best Practices
+## 最佳实践
 
-### Testing Guidelines
+### 测试准则
 
-1. **Test Naming**: Use descriptive test names that explain the scenario
-2. **Test Structure**: Follow Arrange-Act-Assert pattern
-3. **Test Independence**: Each test should be independent and repeatable
-4. **Test Data**: Use fixtures and factories for consistent test data
-5. **Error Testing**: Test both success and failure scenarios
-6. **Performance**: Include performance benchmarks for critical paths
+1. **测试命名**：使用描述性测试名，清楚说明场景
+2. **测试结构**：遵循 Arrange-Act-Assert 模式
+3. **测试独立性**：每个测试应独立且可重复
+4. **测试数据**：用夹具与工厂保证数据一致
+5. **错误测试**：同时测试成功与失败场景
+6. **性能**：为关键路径加入性能基准
 
-### Code Coverage
+### 代码覆盖率
 
 ```bash
-# Generate coverage report
+# 生成覆盖率报告
 go test -coverprofile=coverage.out ./...
 
-# View coverage in browser
+# 在浏览器中查看覆盖率
 go tool cover -html=coverage.out
 
-# Check coverage threshold
+# 检查覆盖率阈值
 go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//' | awk '{if($1<80) exit 1}'
 ```
 
-## Next Steps
+## 下一步
 
-After implementing comprehensive testing:
+实现全面测试后：
 
-- [Performance Optimization](/examples/performance) - Optimize based on test results
-- [Monitoring](/examples/monitoring) - Production monitoring and alerting
-- [Security Hardening](/examples/security) - Advanced security measures
+- [性能优化](/zh/examples/performance) - 基于测试结果优化
+- [监控](/zh/examples/monitoring) - 生产环境监控与告警
+- [安全加固](/zh/examples/security) - 高级安全措施
 
-## Related Documentation
+## 相关文档
 
-- [Error Handling](/api/error-handling) - Error handling patterns
-- [Performance Guide](/api/performance) - Performance optimization
-- [Security Guide](/examples/security) - Security best practices
+- [错误处理](/zh/api/error-handling) - 错误处理模式
+- [性能指南](/zh/api/performance) - 性能优化
+- [安全指南](/zh/examples/security) - 安全最佳实践

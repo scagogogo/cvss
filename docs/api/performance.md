@@ -1,526 +1,285 @@
 # Performance API Reference
 
-This document provides detailed API reference for performance optimization features in CVSS Skills.
+This document covers performance-related APIs and patterns in CVSS Skills: the concurrent batch helpers in `pkg/parser`, the cost model of the parser/calculator, and how to benchmark with the Go standard library.
 
 ## Overview
 
-The Performance API provides tools and utilities for:
+CVSS Skills does **not** ship a custom benchmarker, object pool, or cache type — those concerns are left to your application. What the library *does* provide is:
 
-- Benchmarking and profiling
-- Memory optimization
-- Concurrent processing
-- Caching strategies
-- Resource pooling
+- **Concurrent batch helpers** in `pkg/parser` — `BatchParse` and `BatchValidate` run worker goroutines for you.
+- **Cheap, per-call construction** — `Cvss3xParser` and `Calculator` bind their input at construction and are not reused across vectors, so there is no pool to draw from and no need for one.
+- **One-shot convenience functions** — `ParseString`, `ParseAndValidate`, `ParseAndScore`, etc. collapse multi-step flows into a single call.
 
-## Interfaces
+For benchmarking and profiling, use the Go standard library's `testing.B` and `runtime/pprof` — see [Benchmarking](#benchmarking) below.
 
-### Benchmarker
+## Cost Model
 
-```go
-type Benchmarker interface {
-    BenchmarkParsing(vectors []string, iterations int) *BenchmarkResult
-    BenchmarkCalculation(vectors []*Cvss3x, iterations int) *BenchmarkResult
-    BenchmarkEndToEnd(vectors []string, iterations int) *BenchmarkResult
-    ProfileMemory(fn func()) *MemoryProfile
-    ProfileCPU(fn func(), duration time.Duration) *CPUProfile
-}
-```
+Understanding what each object binds is key to writing performant code:
 
-### ObjectPool
+| Object | Binds input at | Can be reused? | Thread-safe? |
+| ------ | -------------- | -------------- | ------------ |
+| `parser.Cvss3xParser` | construction (`NewCvss3xParser(str)`) | No — there is no `SetVector`; construct a fresh parser per vector | A parser is not shared across goroutines |
+| `cvss.Calculator` | construction (`NewCalculator(cv)`) | No — bound to one `*Cvss3x` | A calculator is not shared across goroutines |
+| `*cvss.Cvss3x` | parse time | Read-only after parse; **safe to share** for concurrent reads | Yes (read-only) |
 
-```go
-type ObjectPool interface {
-    Get() interface{}
-    Put(obj interface{})
-    Size() int
-    Reset()
-}
+::: tip No `SetVector`, no pool
+Because `Cvss3xParser` binds its input string in the constructor and cannot rebind it, a "parser pool" would gain nothing — you would still construct a fresh parser per vector. The same goes for `Calculator`, which binds a `*Cvss3x` at construction. The idiomatic pattern is simply to call `parser.ParseString(v)` per input; each call builds a short-lived, cheap parser.
+:::
 
-type ParserPool interface {
-    ObjectPool
-    GetParser() *parser.Cvss3xParser
-    PutParser(p *parser.Cvss3xParser)
-}
+The parsed `*Cvss3x`, by contrast, is immutable after a successful parse and safe to hand to many goroutines for read-only access (scoring, comparison, JSON serialization).
 
-type CalculatorPool interface {
-    ObjectPool
-    GetCalculator() *cvss.Calculator
-    PutCalculator(c *cvss.Calculator)
-}
-```
+## Batch Helpers
 
-### Cache
+The `pkg/parser` package provides two concurrent helpers for bulk processing. Both spin up a fixed worker pool, preserve input order in the results, and collect per-input errors.
+
+### BatchParse
 
 ```go
-type Cache interface {
-    Get(key string) (interface{}, bool)
-    Set(key string, value interface{}, ttl time.Duration)
-    Delete(key string)
-    Clear()
-    Size() int
-    Stats() *CacheStats
-}
-
-type LRUCache interface {
-    Cache
-    SetCapacity(capacity int)
-    GetCapacity() int
-}
+func BatchParse(vectors []string, workerCount int) []BatchParseResult
 ```
 
-## Core Types
-
-### BenchmarkResult
-
-```go
-type BenchmarkResult struct {
-    Name           string        `json:"name"`
-    Iterations     int           `json:"iterations"`
-    TotalDuration  time.Duration `json:"total_duration"`
-    AverageDuration time.Duration `json:"average_duration"`
-    MinDuration    time.Duration `json:"min_duration"`
-    MaxDuration    time.Duration `json:"max_duration"`
-    OperationsPerSecond float64  `json:"operations_per_second"`
-    AllocationsPerOp   int64     `json:"allocations_per_op"`
-    BytesPerOp         int64     `json:"bytes_per_op"`
-}
-```
-
-### MemoryProfile
-
-```go
-type MemoryProfile struct {
-    HeapAlloc      uint64 `json:"heap_alloc"`
-    HeapSys        uint64 `json:"heap_sys"`
-    HeapIdle       uint64 `json:"heap_idle"`
-    HeapInuse      uint64 `json:"heap_inuse"`
-    HeapReleased   uint64 `json:"heap_released"`
-    HeapObjects    uint64 `json:"heap_objects"`
-    StackInuse     uint64 `json:"stack_inuse"`
-    StackSys       uint64 `json:"stack_sys"`
-    MSpanInuse     uint64 `json:"mspan_inuse"`
-    MSpanSys       uint64 `json:"mspan_sys"`
-    MCacheInuse    uint64 `json:"mcache_inuse"`
-    MCacheSys      uint64 `json:"mcache_sys"`
-    GCSys          uint64 `json:"gc_sys"`
-    OtherSys       uint64 `json:"other_sys"`
-    NextGC         uint64 `json:"next_gc"`
-    LastGC         uint64 `json:"last_gc"`
-    PauseTotalNs   uint64 `json:"pause_total_ns"`
-    PauseNs        []uint64 `json:"pause_ns"`
-    NumGC          uint32 `json:"num_gc"`
-    NumForcedGC    uint32 `json:"num_forced_gc"`
-    GCCPUFraction  float64 `json:"gc_cpu_fraction"`
-}
-```
-
-### CacheStats
-
-```go
-type CacheStats struct {
-    Hits        int64   `json:"hits"`
-    Misses      int64   `json:"misses"`
-    HitRate     float64 `json:"hit_rate"`
-    Size        int     `json:"size"`
-    Capacity    int     `json:"capacity"`
-    Evictions   int64   `json:"evictions"`
-    LastAccess  time.Time `json:"last_access"`
-}
-```
-
-## Factory Functions
-
-### NewBenchmarker
-
-```go
-func NewBenchmarker() Benchmarker
-```
-
-Creates a new benchmarker instance for performance testing.
-
-**Returns:**
-- `Benchmarker`: New benchmarker instance
-
-### NewParserPool
-
-```go
-func NewParserPool(size int) ParserPool
-```
-
-Creates a new parser object pool with the specified size.
+Concurrently parses a slice of CVSS vector strings. `workerCount` controls the goroutine count; if `workerCount <= 0`, it defaults to `len(vectors)`; if it exceeds the input length, it is clamped down. Returns `nil` for an empty input.
 
 **Parameters:**
-- `size`: Maximum number of parsers in the pool
+- `vectors`: CVSS vector strings to parse
+- `workerCount`: number of worker goroutines (clamped to `len(vectors)`)
 
 **Returns:**
-- `ParserPool`: New parser pool instance
+- `[]BatchParseResult`: one result per input, in input order
 
-### NewCalculatorPool
-
-```go
-func NewCalculatorPool(size int) CalculatorPool
-```
-
-Creates a new calculator object pool with the specified size.
-
-**Parameters:**
-- `size`: Maximum number of calculators in the pool
-
-**Returns:**
-- `CalculatorPool`: New calculator pool instance
-
-### NewLRUCache
+**Type:**
 
 ```go
-func NewLRUCache(capacity int) LRUCache
-```
-
-Creates a new LRU cache with the specified capacity.
-
-**Parameters:**
-- `capacity`: Maximum number of items in the cache
-
-**Returns:**
-- `LRUCache`: New LRU cache instance
-
-## Benchmarking Methods
-
-### BenchmarkParsing
-
-```go
-func (b *Benchmarker) BenchmarkParsing(vectors []string, iterations int) *BenchmarkResult
-```
-
-Benchmarks vector parsing performance.
-
-**Parameters:**
-- `vectors`: CVSS vectors to parse
-- `iterations`: Number of iterations to run
-
-**Returns:**
-- `*BenchmarkResult`: Benchmark results
-
-### BenchmarkCalculation
-
-```go
-func (b *Benchmarker) BenchmarkCalculation(vectors []*Cvss3x, iterations int) *BenchmarkResult
-```
-
-Benchmarks score calculation performance.
-
-**Parameters:**
-- `vectors`: Parsed CVSS vectors
-- `iterations`: Number of iterations to run
-
-**Returns:**
-- `*BenchmarkResult`: Benchmark results
-
-### BenchmarkEndToEnd
-
-```go
-func (b *Benchmarker) BenchmarkEndToEnd(vectors []string, iterations int) *BenchmarkResult
-```
-
-Benchmarks end-to-end processing performance.
-
-**Parameters:**
-- `vectors`: CVSS vectors to process
-- `iterations`: Number of iterations to run
-
-**Returns:**
-- `*BenchmarkResult`: Benchmark results
-
-## Profiling Methods
-
-### ProfileMemory
-
-```go
-func (b *Benchmarker) ProfileMemory(fn func()) *MemoryProfile
-```
-
-Profiles memory usage of a function.
-
-**Parameters:**
-- `fn`: Function to profile
-
-**Returns:**
-- `*MemoryProfile`: Memory usage profile
-
-### ProfileCPU
-
-```go
-func (b *Benchmarker) ProfileCPU(fn func(), duration time.Duration) *CPUProfile
-```
-
-Profiles CPU usage of a function.
-
-**Parameters:**
-- `fn`: Function to profile
-- `duration`: Profiling duration
-
-**Returns:**
-- `*CPUProfile`: CPU usage profile
-
-## Object Pool Methods
-
-### Get
-
-```go
-func (p *ParserPool) Get() interface{}
-func (p *ParserPool) GetParser() *parser.Cvss3xParser
-```
-
-Gets an object from the pool.
-
-**Returns:**
-- Object from the pool or new object if pool is empty
-
-### Put
-
-```go
-func (p *ParserPool) Put(obj interface{})
-func (p *ParserPool) PutParser(parser *parser.Cvss3xParser)
-```
-
-Returns an object to the pool.
-
-**Parameters:**
-- `obj`: Object to return to the pool
-
-### Size
-
-```go
-func (p *ObjectPool) Size() int
-```
-
-Returns the current size of the pool.
-
-**Returns:**
-- `int`: Number of objects in the pool
-
-### Reset
-
-```go
-func (p *ObjectPool) Reset()
-```
-
-Clears all objects from the pool.
-
-## Cache Methods
-
-### Get
-
-```go
-func (c *Cache) Get(key string) (interface{}, bool)
-```
-
-Retrieves a value from the cache.
-
-**Parameters:**
-- `key`: Cache key
-
-**Returns:**
-- `interface{}`: Cached value
-- `bool`: True if key exists
-
-### Set
-
-```go
-func (c *Cache) Set(key string, value interface{}, ttl time.Duration)
-```
-
-Stores a value in the cache.
-
-**Parameters:**
-- `key`: Cache key
-- `value`: Value to cache
-- `ttl`: Time to live
-
-### Delete
-
-```go
-func (c *Cache) Delete(key string)
-```
-
-Removes a value from the cache.
-
-**Parameters:**
-- `key`: Cache key to remove
-
-### Stats
-
-```go
-func (c *Cache) Stats() *CacheStats
-```
-
-Returns cache statistics.
-
-**Returns:**
-- `*CacheStats`: Cache statistics
-
-## Performance Utilities
-
-### ProcessorOptimizer
-
-```go
-type ProcessorOptimizer struct {
-    ParserPool     ParserPool
-    CalculatorPool CalculatorPool
-    Cache          Cache
-    Metrics        *PerformanceMetrics
-}
-
-func NewProcessorOptimizer(config *OptimizerConfig) *ProcessorOptimizer
-```
-
-Creates an optimized processor with pooling and caching.
-
-### ConcurrentProcessor
-
-```go
-type ConcurrentProcessor struct {
-    WorkerCount int
-    BufferSize  int
-    Timeout     time.Duration
-}
-
-func (cp *ConcurrentProcessor) ProcessVectors(vectors []string) ([]Result, error)
-```
-
-Processes vectors concurrently using worker pools.
-
-### BatchProcessor
-
-```go
-type BatchProcessor struct {
-    BatchSize   int
-    MaxBatches  int
-    Parallelism int
-}
-
-func (bp *BatchProcessor) ProcessBatches(vectors []string) ([]Result, error)
-```
-
-Processes vectors in batches for memory efficiency.
-
-## Performance Metrics
-
-### PerformanceMetrics
-
-```go
-type PerformanceMetrics struct {
-    ProcessedVectors    int64
-    TotalDuration      time.Duration
-    AverageDuration    time.Duration
-    ErrorCount         int64
-    CacheHitRate       float64
-    MemoryUsage        uint64
-    GoroutineCount     int
-}
-
-func (pm *PerformanceMetrics) Record(duration time.Duration, err error)
-func (pm *PerformanceMetrics) GetStats() *PerformanceStats
-func (pm *PerformanceMetrics) Reset()
-```
-
-Tracks performance metrics during processing.
-
-## Configuration
-
-### OptimizerConfig
-
-```go
-type OptimizerConfig struct {
-    ParserPoolSize     int           `json:"parser_pool_size"`
-    CalculatorPoolSize int           `json:"calculator_pool_size"`
-    CacheCapacity      int           `json:"cache_capacity"`
-    CacheTTL           time.Duration `json:"cache_ttl"`
-    EnableMetrics      bool          `json:"enable_metrics"`
-    WorkerCount        int           `json:"worker_count"`
-    BufferSize         int           `json:"buffer_size"`
-    BatchSize          int           `json:"batch_size"`
+type BatchParseResult struct {
+    Index  int          // original input index
+    Vector *cvss.Cvss3x // parsed object, nil on failure
+    Error  error        // parse error, nil on success
 }
 ```
 
-Configuration for performance optimization.
+**Example:**
+
+```go
+results := parser.BatchParse([]string{
+    "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+    "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:C/C:L/I:L/A:N",
+}, 4)
+for _, r := range results {
+    if r.Error != nil {
+        log.Printf("index %d: %v", r.Index, r.Error)
+        continue
+    }
+    fmt.Println(r.Vector.String())
+}
+```
+
+### BatchValidate
+
+```go
+func BatchValidate(vectors []string, workerCount int) []BatchValidateResult
+```
+
+Concurrently parses **and** validates each vector in one step (uses `ParseAndValidate` internally). Each result carries both the parsed vector and a slice of validation error messages. Same worker-count clamping rules as `BatchParse`.
+
+**Parameters:**
+- `vectors`: CVSS vector strings to parse and validate
+- `workerCount`: number of worker goroutines
+
+**Returns:**
+- `[]BatchValidateResult`: one result per input, in input order
+
+**Type:**
+
+```go
+type BatchValidateResult struct {
+    Index  int          // original input index
+    Vector *cvss.Cvss3x // parsed object, nil on failure
+    Valid  bool         // whether the vector is valid
+    Errors []string     // all validation error messages
+    Error  error        // parse error (distinct from validation errors)
+}
+```
+
+**Example:**
+
+```go
+results := parser.BatchValidate(myVectors, runtime.NumCPU())
+valid := 0
+for _, r := range results {
+    if r.Valid {
+        valid++
+        continue
+    }
+    log.Printf("index %d invalid: %v", r.Index, r.Errors)
+}
+fmt.Printf("%d/%d valid\n", valid, len(results))
+```
+
+## One-Shot Convenience Functions
+
+For single vectors, the convenience functions in `pkg/parser` collapse common multi-step flows into one call. Each is a thin wrapper around `NewCvss3xParser` + `Parse`:
+
+| Function | Returns | Use when |
+| -------- | ------- | -------- |
+| `ParseString(str)` | `(*Cvss3x, error)` | You just need the parsed struct |
+| `MustParse(str)` | `*Cvss3x` (panics on error) | Tests / hardcoded vectors |
+| `ParseRelaxed(str, defaultVer)` | `(*Cvss3x, error)` | Input may lack the `CVSS:` prefix |
+| `ParseAndValidate(str)` | `(*Cvss3x, error)` | You need structural validation errors |
+| `ParseAndScore(str)` | `(*Cvss3x, float64, Severity, error)` | You want parse → validate → score in one call |
+
+Prefer `ParseAndScore` for the common "give me the score for this vector" path — it avoids constructing a separate `Calculator` by hand.
+
+## Concurrent Processing Patterns
+
+When the batch helpers don't fit (e.g. you need to score in parallel, or fan out work across a pipeline), the idiomatic pattern is a worker pool over a buffered channel. Because each `*Cvss3x` is read-only after parse, a parsed vector can be handed to many scoring goroutines safely:
+
+```go
+func scoreConcurrently(vectors []string, workers int) ([]float64, error) {
+    type job struct{ idx int; vec string }
+    type result struct{ idx int; score float64; err error }
+
+    jobs := make(chan job, len(vectors))
+    results := make([]float64, len(vectors))
+
+    // Producer
+    go func() {
+        for i, v := range vectors {
+            jobs <- job{i, v}
+        }
+        close(jobs)
+    }()
+
+    // Workers — each parses and scores its own inputs
+    var wg sync.WaitGroup
+    for w := 0; w < workers; w++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for j := range jobs {
+                cv, err := parser.ParseString(j.vec)
+                if err != nil {
+                    // surface error as appropriate; here we store 0
+                    continue
+                }
+                score, err := cvss.NewCalculator(cv).Calculate()
+                if err == nil {
+                    results[j.idx] = score
+                }
+            }
+        }()
+    }
+    wg.Wait()
+    return results, nil
+}
+```
+
+::: warning Do not share a `Calculator` or `Cvss3xParser` across goroutines
+A `Calculator` is bound to one `*Cvss3x` at construction and a `Cvss3xParser` to one input string. Both are meant to be short-lived and single-goroutine. The parsed `*Cvss3x` is the only object safe to share — construct a fresh `Calculator` per goroutine with `cvss.NewCalculator(cv)`.
+:::
+
+## Benchmarking
+
+Use the Go standard library's `testing.B` for benchmarks — there is no in-library benchmarker. Place benchmarks in a `_test.go` file:
+
+```go
+func BenchmarkParseString(b *testing.B) {
+    vector := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+    b.ReportAllocs()
+    for i := 0; i < b.N; i++ {
+        _, _ = parser.ParseString(vector)
+    }
+}
+
+func BenchmarkCalculate(b *testing.B) {
+    cv, _ := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+    b.ReportAllocs()
+    b.ResetTimer()
+    for i := 0; i < b.N; i++ {
+        _, _ = cvss.NewCalculator(cv).Calculate()
+    }
+}
+```
+
+Run with:
+
+```bash
+go test -bench=. -benchmem ./...
+```
+
+For CPU and memory profiling, use `runtime/pprof` (or the `-cpuprofile` / `-memprofile` flags of `go test`):
+
+```bash
+go test -bench=. -benchmem -cpuprofile=cpu.prof -memprofile=mem.prof ./...
+go tool pprof cpu.prof
+go tool pprof mem.prof
+```
 
 ## Best Practices
 
-### Memory Management
+### Memory
 
-1. **Use Object Pools**: Reuse parser and calculator instances
-2. **Limit Cache Size**: Set appropriate cache capacity
-3. **Monitor Memory**: Track memory usage and GC pressure
-4. **Batch Processing**: Process large datasets in chunks
+1. **Don't pool parsers/calculators** — they bind input at construction and cannot rebound; just construct per call.
+2. **Reuse the parsed `*Cvss3x`** — it is immutable after parse; cache it if the same vector is scored repeatedly.
+3. **Use `b.ReportAllocs()`** in benchmarks to track allocation pressure.
+4. **Batch large inputs** — `BatchParse` / `BatchValidate` avoid per-item goroutine setup overhead versus ad-hoc worker pools.
 
 ### Concurrency
 
-1. **Worker Pools**: Use fixed number of workers
-2. **Buffered Channels**: Prevent goroutine blocking
-3. **Timeout Handling**: Set appropriate timeouts
-4. **Error Handling**: Handle errors gracefully in concurrent code
+1. **Pick a sensible worker count** — `runtime.NumCPU()` is a good default for CPU-bound scoring.
+2. **Buffer the jobs channel** — `make(chan job, len(inputs))` prevents the producer from blocking.
+3. **Preserve input order** — write results by index, as `BatchParse` does, rather than appending.
+4. **Share `*Cvss3x`, not `Calculator`** — the parsed struct is read-only and concurrency-safe; calculators are not.
 
 ### Caching
 
-1. **Cache Strategy**: Choose appropriate cache eviction policy
-2. **TTL Settings**: Set reasonable time-to-live values
-3. **Cache Warming**: Pre-populate cache with common values
-4. **Monitor Hit Rate**: Track cache effectiveness
+1. **Cache the parsed vector, not the parser** — the `*Cvss3x` is immutable and cheap to hold.
+2. **Key on the normalized vector string** — `cvss3x.String()` returns the canonical form; use it as the cache key.
+3. **Bound the cache** — an unbounded map grows forever; use an LRU (your application's choice of library).
+4. **Invalidate on version change** — a `CVSS:3.0` and `CVSS:3.1` vector with the same metrics can score differently; include the version prefix in the cache key.
 
 ## Examples
 
-### Basic Benchmarking
+### Batch scoring with BatchParse
 
 ```go
-benchmarker := NewBenchmarker()
-vectors := []string{
-    "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-    "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:L",
-}
+vectors := loadVectorsFromFile("vectors.txt") // []string, one per line
+results := parser.BatchParse(vectors, runtime.NumCPU())
 
-result := benchmarker.BenchmarkParsing(vectors, 1000)
-fmt.Printf("Average duration: %v\n", result.AverageDuration)
-fmt.Printf("Operations/sec: %.0f\n", result.OperationsPerSecond)
-```
-
-### Per-Call Parsing
-
-`Cvss3xParser` binds its input string at construction and cannot be rebound (there is no `SetVector`), so there is no parser object pool to draw from. For repeated one-shot parsing, just call `parser.ParseString` — each call constructs a fresh, cheap parser:
-
-```go
-vectors := []string{
-    "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-    "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:L",
-}
-
-for _, v := range vectors {
-    cv, err := parser.ParseString(v)
-    if err != nil {
+for _, r := range results {
+    if r.Error != nil {
+        log.Printf("index %d: parse failed: %v", r.Index, r.Error)
         continue
     }
-    // ... use cv
+    score, err := cvss.NewCalculator(r.Vector).Calculate()
+    if err != nil {
+        log.Printf("index %d: score failed: %v", r.Index, err)
+        continue
+    }
+    fmt.Printf("%s -> %.1f\n", r.Vector.String(), score)
 }
 ```
 
-For concurrent bulk parsing, `parser.BatchParse(vectors, workerCount)` handles worker goroutines and per-input error collection for you.
-
-### Cache Usage
+### Caching parsed vectors
 
 ```go
-cache := NewLRUCache(1000)
+// Application-level LRU cache; the library does not provide one.
+var cache = lru.New(capacity) // from your chosen LRU library
 
-// Store result
-cache.Set("vector1", result, 1*time.Hour)
-
-// Retrieve result
-if cached, found := cache.Get("vector1"); found {
-    result := cached.(*Result)
-    // Use cached result
+func scoreCached(vectorStr string) (float64, error) {
+    if cv, ok := cache.Get(vectorStr); ok {
+        return cvss.NewCalculator(cv.(*cvss.Cvss3x)).Calculate()
+    }
+    cv, err := parser.ParseString(vectorStr)
+    if err != nil {
+        return 0, err
+    }
+    cache.Add(vectorStr, cv)
+    return cvss.NewCalculator(cv).Calculate()
 }
 ```
 
 ## Related Documentation
 
-- [Performance Examples](/examples/performance) - Practical performance optimization
-- [Concurrent Processing](/api/performance) - Advanced concurrency patterns
-- [Memory Management](/api/performance) - Memory optimization techniques
+- [Performance Examples](/examples/performance) - Practical optimization walkthroughs
+- [Calculator API](/api/cvss/calculator) - The scoring API bound at construction
+- [Parser API](/api/parser/) - `ParseString`, `BatchParse`, and the convenience functions
