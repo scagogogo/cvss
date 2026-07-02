@@ -9,10 +9,10 @@
 ```mermaid
 flowchart TD
     Start(["Calculate()"]) --> Q1{含环境指标?}
-    Q1 -->|是| Env["CalculateEnvironmentalScore()"]
+    Q1 -->|是| Env["GetEnvironmentalScore()"]
     Q1 -->|否| Q2{含时间指标?}
-    Q2 -->|是| Temp["CalculateTemporalScore()"]
-    Q2 -->|否| Base["CalculateBaseScore()"]
+    Q2 -->|是| Temp["GetTemporalScore()"]
+    Q2 -->|否| Base["GetBaseScore()"]
     Env --> R(["最终评分 0.0–10.0"])
     Temp --> R
     Base --> R
@@ -20,6 +20,10 @@ flowchart TD
     classDef pick fill:#f6ffed,stroke:#52c41a,color:#135200;
     class Env,Temp,Base pick;
 ```
+
+::: info 内部原理
+`Calculate()` 内部分发到与公开方法 `GetBaseScore()`、`GetTemporalScore()`、`GetEnvironmentalScore()` 相同的私有例程。分发顺序为：环境 → 时间 → 基础。
+:::
 
 ## 基础评分公式（CVSS v3.1）
 
@@ -51,33 +55,43 @@ flowchart TD
 `PR` 与 `UI` 的取值权重在 v3.0 与 v3.1 之间不同（例如 `UI:R` 在 v3.0 为 0.56，v3.1 为 0.62）。计算器具备版本感知能力，会根据解析出的 `CVSS:3.0` / `CVSS:3.1` 前缀自动套用正确的权重表。
 :::
 
-## 接口定义
+## 类型定义
+
+`Calculator` 是一个结构体，内部持有已解析的 `*Cvss3x` 向量。通过 `NewCalculator` 构造，评分方法定义在 `*Calculator` 接收者上：
 
 ```go
-type Calculator interface {
-    Calculate() (float64, error)
-    CalculateBaseScore() (float64, error)
-    CalculateTemporalScore() (float64, error)
-    CalculateEnvironmentalScore() (float64, error)
-    GetSeverityRating(score float64) string
+type Calculator struct {
+    // 非导出：持有传入 NewCalculator 的 *Cvss3x
 }
+
+func NewCalculator(cvss *Cvss3x) *Calculator
+
+func (c *Calculator) Calculate() (float64, error)
+func (c *Calculator) GetBaseScore() (float64, error)
+func (c *Calculator) GetTemporalScore() (float64, error)
+func (c *Calculator) GetEnvironmentalScore() (float64, error)
+func (c *Calculator) GetSeverityRating(score float64) Severity
 ```
+
+::: warning 不可跨向量重用
+`Calculator` 只持有一个 `*Cvss3x`，且不提供 setter。请为每个向量新建 `Calculator` —— 构造开销极低。
+:::
 
 ## 创建计算器
 
 ### NewCalculator
 
 ```go
-func NewCalculator(vector *Cvss3x) Calculator
+func NewCalculator(cvss *Cvss3x) *Calculator
 ```
 
-创建一个新的计算器实例。
+创建一个绑定到指定向量的新计算器。
 
 **参数：**
-- `vector`: 要计算的 CVSS 3.x 向量
+- `cvss`: 已解析的 CVSS 3.x 向量（`*Cvss3x`）
 
 **返回值：**
-- `Calculator`: 计算器实例
+- `*Calculator`: 计算器实例
 
 **示例：**
 ```go
@@ -110,10 +124,10 @@ if err != nil {
 fmt.Printf("CVSS 评分: %.1f\n", score)
 ```
 
-### CalculateBaseScore
+### GetBaseScore
 
 ```go
-func (c *Calculator) CalculateBaseScore() (float64, error)
+func (c *Calculator) GetBaseScore() (float64, error)
 ```
 
 计算 CVSS 基础评分，仅基于基础指标。
@@ -131,20 +145,20 @@ func (c *Calculator) CalculateBaseScore() (float64, error)
 
 **示例：**
 ```go
-baseScore, err := calculator.CalculateBaseScore()
+baseScore, err := calculator.GetBaseScore()
 if err != nil {
     log.Fatalf("基础评分计算失败: %v", err)
 }
 fmt.Printf("基础评分: %.1f\n", baseScore)
 ```
 
-### CalculateTemporalScore
+### GetTemporalScore
 
 ```go
-func (c *Calculator) CalculateTemporalScore() (float64, error)
+func (c *Calculator) GetTemporalScore() (float64, error)
 ```
 
-计算时间评分，基于基础评分和时间指标。
+计算时间评分，基于基础评分和时间指标（`E`、`RL`、`RC`）。
 
 **计算公式：**
 ```
@@ -153,20 +167,20 @@ func (c *Calculator) CalculateTemporalScore() (float64, error)
 
 **示例：**
 ```go
-temporalScore, err := calculator.CalculateTemporalScore()
+temporalScore, err := calculator.GetTemporalScore()
 if err != nil {
     log.Fatalf("时间评分计算失败: %v", err)
 }
 fmt.Printf("时间评分: %.1f\n", temporalScore)
 ```
 
-### CalculateEnvironmentalScore
+### GetEnvironmentalScore
 
 ```go
-func (c *Calculator) CalculateEnvironmentalScore() (float64, error)
+func (c *Calculator) GetEnvironmentalScore() (float64, error)
 ```
 
-计算环境评分，基于修改后的基础指标和环境指标。
+计算环境评分，基于修改后的基础指标和环境需求指标。
 
 **计算公式：**
 ```
@@ -185,7 +199,7 @@ func (c *Calculator) CalculateEnvironmentalScore() (float64, error)
 
 **示例：**
 ```go
-envScore, err := calculator.CalculateEnvironmentalScore()
+envScore, err := calculator.GetEnvironmentalScore()
 if err != nil {
     log.Fatalf("环境评分计算失败: %v", err)
 }
@@ -195,10 +209,10 @@ fmt.Printf("环境评分: %.1f\n", envScore)
 ### GetSeverityRating
 
 ```go
-func (c *Calculator) GetSeverityRating(score float64) string
+func (c *Calculator) GetSeverityRating(score float64) Severity
 ```
 
-根据 CVSS 评分获取对应的严重性等级。
+根据 CVSS 评分获取对应的严重性等级。`Severity` 是以 `string` 为底层类型的类型，并实现了 `String()` 方法，因此可直接用 `%s` 打印。
 
 **评分范围和等级：**
 
@@ -243,9 +257,9 @@ func main() {
     
     // 创建计算器
     calculator := cvss.NewCalculator(vector)
-    
+
     // 计算各种评分
-    baseScore, err := calculator.CalculateBaseScore()
+    baseScore, err := calculator.GetBaseScore()
     if err != nil {
         log.Fatalf("基础评分计算失败: %v", err)
     }
@@ -303,18 +317,18 @@ func detailedAnalysis(vectorStr string) {
     calculator := cvss.NewCalculator(vector)
     
     // 计算所有类型的评分
-    baseScore, _ := calculator.CalculateBaseScore()
-    
+    baseScore, _ := calculator.GetBaseScore()
+
     var temporalScore, envScore float64
-    
+
     // 检查是否有时间指标
     if vector.Cvss3xTemporal != nil {
-        temporalScore, _ = calculator.CalculateTemporalScore()
+        temporalScore, _ = calculator.GetTemporalScore()
     }
-    
+
     // 检查是否有环境指标
     if vector.Cvss3xEnvironmental != nil {
-        envScore, _ = calculator.CalculateEnvironmentalScore()
+        envScore, _ = calculator.GetEnvironmentalScore()
     }
     
     finalScore, _ := calculator.Calculate()
@@ -339,25 +353,33 @@ func detailedAnalysis(vectorStr string) {
 
 ## 错误处理
 
-计算器可能返回以下类型的错误：
-
-### 常见错误
+`Calculate()` 在向量不完整或非法时返回普通 `error`（内部执行 `Cvss3x.Check()`，后者以字符串形式报告第一个缺失的指标）。若需要逐指标的结构化诊断，请先调用 `Validate()` —— 它返回 `ValidationErrors`，即 `*ValidationError` 的切片，每项含 `Metric` 与 `Message` 字段：
 
 ```go
+// 评分前进行结构化校验
+if err := vector.Validate(); err != nil {
+    if ve, ok := err.(cvss.ValidationErrors); ok {
+        for _, e := range ve {
+            fmt.Printf("指标 %s: %s\n", e.Metric, e.Message)
+        }
+        fmt.Printf("缺失指标: %v\n", ve.MissingMetrics())
+    } else {
+        fmt.Printf("校验错误: %v\n", err)
+    }
+    return
+}
+
+// 此时可安全评分
 score, err := calculator.Calculate()
 if err != nil {
-    switch e := err.(type) {
-    case *cvss.InvalidVectorError:
-        fmt.Printf("无效向量: %s\n", e.Message)
-    case *cvss.MissingMetricError:
-        fmt.Printf("缺少必需指标: %s\n", e.Metric)
-    case *cvss.CalculationError:
-        fmt.Printf("计算错误: %s\n", e.Message)
-    default:
-        fmt.Printf("未知错误: %v\n", err)
-    }
+    fmt.Printf("计算错误: %v\n", err) // 例如 "calculator or cvss is nil"
+    return
 }
 ```
+
+::: tip Check() 与 Validate() 的区别
+`Check()`（`Calculate()` 内部使用）返回单个 `error`，只描述第一个问题；`Validate()` 将所有问题收集到 `ValidationErrors`。当你希望一次性报告全部缺失指标时，应使用 `Validate()`。
+:::
 
 ### 验证向量
 
@@ -380,19 +402,19 @@ func validateVector(vector *cvss.Cvss3x) error {
 
 ## 性能优化
 
-### 重用计算器
+### 按向量新建计算器
+
+`Calculator` 不持有可复用的内部状态，也无 setter，因此对每个向量都应新建一个实例。构造本身只做一次指针赋值，开销极低：
 
 ```go
-// 对于大量计算，重用计算器实例
-calculator := cvss.NewCalculator(nil)
-
+// 批量评分：为每个向量新建 Calculator
 for _, vector := range vectors {
-    calculator.SetVector(vector)
+    calculator := cvss.NewCalculator(vector)
     score, err := calculator.Calculate()
     if err != nil {
         continue
     }
-    
+
     // 处理评分...
 }
 ```
