@@ -14,28 +14,52 @@ flowchart LR
     F2 --> M
     M --> E["欧氏<br/>√Σ(aᵢ−bᵢ)²"]
     M --> Man["曼哈顿<br/>Σ|aᵢ−bᵢ|"]
-    M --> Ch["切比雪夫<br/>max|aᵢ−bᵢ|"]
-    M --> Cos["余弦<br/>A·B / |A||B|"]
+    M --> Ham["汉明<br/>不同位置计数"]
     M --> Jac["Jaccard<br/>|A∩B| / |A∪B|"]
+    M --> Sd["评分差<br/>|scoreA − scoreB|"]
 
     classDef dist fill:#f9f0ff,stroke:#722ed1,color:#391085;
-    class E,Man,Ch,Cos,Jac dist;
+    class E,Man,Ham,Jac,Sd dist;
 ```
 
 ::: tip 距离与相似度
-欧氏 / 曼哈顿 / 切比雪夫返回**距离**（0 表示完全相同，越大越不同）；余弦 / Jaccard 返回**相似度**（1 表示完全相同，0 表示完全不相交）。按场景选择：聚类偏向距离，去重偏向相似度。
+欧氏 / 曼哈顿 / 汉明 / 评分差返回**距离**（0 表示完全相同，越大越不同）；Jaccard 返回**相似度**（1 表示完全相同，0 表示完全不相交）。按场景选择：聚类偏向距离，去重偏向相似度。
 :::
 
-## 接口定义
+::: info 环境感知变体
+凡考虑指标*取值*的度量，均有 `…WithEnv` 变体（如 `EuclideanDistanceWithEnv`），在存在修正后的环境指标时改用修正值。另有 `…Checked` 变体（如 `EuclideanDistanceChecked`），返回 `(float64, error)` 而非裸 `float64`。
+:::
+
+## 类型定义
+
+`DistanceCalculator` 是一个持有两个 `*Cvss3x` 引用的结构体。通过 `NewDistanceCalculator` 构造，度量方法定义在 `*DistanceCalculator` 接收者上：
 
 ```go
-type DistanceCalculator interface {
-    EuclideanDistance() float64
-    ManhattanDistance() float64
-    ChebyshevDistance() float64
-    CosineSimilarity() float64
-    JaccardSimilarity() float64
+type DistanceCalculator struct {
+    // 非导出：持有两个 *Cvss3x 向量
 }
+
+func NewDistanceCalculator(vector1, vector2 *Cvss3x) *DistanceCalculator
+
+// 基于取值的度量
+func (dc *DistanceCalculator) EuclideanDistance() float64
+func (dc *DistanceCalculator) ManhattanDistance() float64
+func (dc *DistanceCalculator) HammingDistance() int
+func (dc *DistanceCalculator) JaccardSimilarity() float64
+func (dc *DistanceCalculator) ScoreDifference() float64
+
+// 环境感知变体（存在修正指标时改用修正值）
+func (dc *DistanceCalculator) EuclideanDistanceWithEnv() float64
+func (dc *DistanceCalculator) ManhattanDistanceWithEnv() float64
+func (dc *DistanceCalculator) HammingDistanceWithEnv() int
+func (dc *DistanceCalculator) JaccardSimilarityWithEnv() float64
+
+// Checked 变体（返回 error 而非静默返回 0）
+func (dc *DistanceCalculator) EuclideanDistanceChecked() (float64, error)
+func (dc *DistanceCalculator) ManhattanDistanceChecked() (float64, error)
+func (dc *DistanceCalculator) ScoreDifferenceChecked() (float64, error)
+func (dc *DistanceCalculator) EuclideanDistanceWithEnvChecked() (float64, error)
+func (dc *DistanceCalculator) ManhattanDistanceWithEnvChecked() (float64, error)
 ```
 
 ## 创建计算器
@@ -43,7 +67,7 @@ type DistanceCalculator interface {
 ### NewDistanceCalculator
 
 ```go
-func NewDistanceCalculator(vector1, vector2 *Cvss3x) DistanceCalculator
+func NewDistanceCalculator(vector1, vector2 *Cvss3x) *DistanceCalculator
 ```
 
 为两个 CVSS 向量创建新的距离计算器。
@@ -53,7 +77,7 @@ func NewDistanceCalculator(vector1, vector2 *Cvss3x) DistanceCalculator
 - `vector2`: 第二个 CVSS 向量
 
 **返回值:**
-- `DistanceCalculator`: 距离计算器实例
+- `*DistanceCalculator`: 距离计算器实例
 
 **示例:**
 ```go
@@ -65,7 +89,7 @@ calc := cvss.NewDistanceCalculator(vector1, vector2)
 ### EuclideanDistance
 
 ```go
-func (d *DistanceCalculator) EuclideanDistance() float64
+func (dc *DistanceCalculator) EuclideanDistance() float64
 ```
 
 计算两个向量之间的欧几里得距离。
@@ -78,7 +102,7 @@ distance = √(Σ(xi - yi)²)
 其中 xi 和 yi 是两个向量在第 i 个维度上的值。
 
 **返回值:**
-- `float64`: 欧几里得距离值 (0.0 到 ∞)
+- `float64`: 欧几里得距离值 (0.0 到 ~3.0，取决于所含指标)
 
 **示例:**
 ```go
@@ -94,7 +118,7 @@ fmt.Printf("欧几里得距离: %.3f\n", distance)
 ### ManhattanDistance
 
 ```go
-func (d *DistanceCalculator) ManhattanDistance() float64
+func (dc *DistanceCalculator) ManhattanDistance() float64
 ```
 
 计算两个向量之间的曼哈顿距离（也称为城市街区距离）。
@@ -105,7 +129,7 @@ distance = Σ|xi - yi|
 ```
 
 **返回值:**
-- `float64`: 曼哈顿距离值 (0.0 到 ∞)
+- `float64`: 曼哈顿距离值 (0.0 到 ~8.0，取决于所含指标)
 
 **示例:**
 ```go
@@ -118,81 +142,74 @@ fmt.Printf("曼哈顿距离: %.3f\n", distance)
 - 计算效率高
 - 适用于高维数据
 
-### ChebyshevDistance
+### HammingDistance
 
 ```go
-func (d *DistanceCalculator) ChebyshevDistance() float64
+func (dc *DistanceCalculator) HammingDistance() int
 ```
 
-计算两个向量之间的切比雪夫距离（也称为无穷范数距离）。
+统计两个向量在指标位置上不同（按短值）的个数。仅比较两个向量上都存在的指标。
 
 **公式:**
 ```
-distance = max(|xi - yi|)
+distance = #{ i : xi != yi }
 ```
 
 **返回值:**
-- `float64`: 切比雪夫距离值 (0.0 到 ∞)
+- `int`: 不同的位置数（0 表示每个共有指标都相同）
 
 **示例:**
 ```go
-distance := calc.ChebyshevDistance()
-fmt.Printf("切比雪夫距离: %.3f\n", distance)
+distance := calc.HammingDistance()
+fmt.Printf("汉明距离: %d\n", distance)
 ```
 
 **应用场景:**
-- 最大差异分析
-- 游戏AI路径规划
-- 图像处理
+- 类别型差异计数
+- 快速检查"改动了几项指标"
+- 向量修订间的变更检测
 
-## 相似性度量
+## 评分差度量
 
-### CosineSimilarity
+### ScoreDifference
 
 ```go
-func (d *DistanceCalculator) CosineSimilarity() float64
+func (dc *DistanceCalculator) ScoreDifference() float64
 ```
 
-计算两个向量之间的余弦相似度。
+返回两个向量计算所得评分之差的绝对值。与逐指标距离不同，它先将整个向量塌缩为评分，再取 `|scoreA − scoreB|`。
 
 **公式:**
 ```
-similarity = (A · B) / (||A|| × ||B||)
+difference = |Calculate(A) − Calculate(B)|
 ```
 
-其中 A · B 是向量点积，||A|| 和 ||B|| 是向量的欧几里得范数。
-
 **返回值:**
-- `float64`: 余弦相似度值 (-1.0 到 1.0)
-  - 1.0: 完全相同
-  - 0.0: 正交（无关）
-  - -1.0: 完全相反
+- `float64`: 评分差的绝对值 (0.0 到 10.0)
 
 **示例:**
 ```go
-similarity := calc.CosineSimilarity()
-fmt.Printf("余弦相似度: %.3f\n", similarity)
+diff := calc.ScoreDifference()
+fmt.Printf("评分差: %.3f\n", diff)
 
-if similarity > 0.9 {
-    fmt.Println("向量非常相似")
-} else if similarity > 0.7 {
-    fmt.Println("向量相似")
-} else if similarity > 0.3 {
-    fmt.Println("向量有一定相似性")
+if diff < 0.5 {
+    fmt.Println("评分几乎相同")
+} else if diff < 2.0 {
+    fmt.Println("评分有差异")
 } else {
-    fmt.Println("向量差异较大")
+    fmt.Println("评分差异显著")
 }
 ```
 
 **优势:**
-- 不受向量大小影响
-- 适用于高维稀疏数据
-- 广泛用于文本分析和推荐系统
+- 直接反映真实影响差距，而非指标数量
+- 适合判断评分是否跨越严重性边界（如是否越过 9.0）
+- 优先级排序：按真实影响增量而非指标计数来排列向量对
 
 ### JaccardSimilarity
 
 ```go
-func (d *DistanceCalculator) JaccardSimilarity() float64
+func (dc *DistanceCalculator) JaccardSimilarity() float64
 ```
 
 计算两个向量之间的雅卡德相似度。
@@ -248,8 +265,8 @@ func main() {
     // 计算各种距离
     fmt.Printf("欧几里得距离: %.3f\n", calc.EuclideanDistance())
     fmt.Printf("曼哈顿距离: %.3f\n", calc.ManhattanDistance())
-    fmt.Printf("切比雪夫距离: %.3f\n", calc.ChebyshevDistance())
-    fmt.Printf("余弦相似度: %.3f\n", calc.CosineSimilarity())
+    fmt.Printf("汉明距离: %d\n", calc.HammingDistance())
+    fmt.Printf("评分差: %.3f\n", calc.ScoreDifference())
     fmt.Printf("雅卡德相似度: %.3f\n", calc.JaccardSimilarity())
 }
 ```
@@ -295,21 +312,21 @@ func clusterVectors(vectors []*cvss.Cvss3x, threshold float64) [][]int {
 ```go
 func analyzeSimilarity(v1, v2 *cvss.Cvss3x) {
     calc := cvss.NewDistanceCalculator(v1, v2)
-    
+
     euclidean := calc.EuclideanDistance()
-    cosine := calc.CosineSimilarity()
-    
+    jaccard := calc.JaccardSimilarity()
+
     fmt.Printf("向量1: %s\n", v1.String())
     fmt.Printf("向量2: %s\n", v2.String())
     fmt.Printf("欧几里得距离: %.3f\n", euclidean)
-    fmt.Printf("余弦相似度: %.3f\n", cosine)
-    
-    // 相似性判断
-    if cosine > 0.9 {
+    fmt.Printf("雅卡德相似度: %.3f\n", jaccard)
+
+    // 相似性判断（Jaccard：越大越相似）
+    if jaccard > 0.9 {
         fmt.Println("结论: 向量非常相似")
-    } else if cosine > 0.7 {
+    } else if jaccard > 0.7 {
         fmt.Println("结论: 向量相似")
-    } else if cosine > 0.3 {
+    } else if jaccard > 0.3 {
         fmt.Println("结论: 向量有一定相似性")
     } else {
         fmt.Println("结论: 向量差异较大")
@@ -319,60 +336,40 @@ func analyzeSimilarity(v1, v2 *cvss.Cvss3x) {
 
 ## 性能优化
 
-### 批量计算优化
+### 带缓存的成对计算
+
+`DistanceCalculator` 不持有可变状态，但反复重算同一向量对是浪费。用按向量对索引的小缓存可实现 O(1) 重复查询；`…Checked` 变体会暴露解析/评分错误，而非静默返回 0：
 
 ```go
-type BatchDistanceCalculator struct {
+type PairCache struct {
     vectors []*cvss.Cvss3x
-    cache   map[string]float64
-    mutex   sync.RWMutex
+    cache   map[[2]int]float64
 }
 
-func NewBatchDistanceCalculator(vectors []*cvss.Cvss3x) *BatchDistanceCalculator {
-    return &BatchDistanceCalculator{
-        vectors: vectors,
-        cache:   make(map[string]float64),
-    }
+func NewPairCache(vectors []*cvss.Cvss3x) *PairCache {
+    return &PairCache{vectors: vectors, cache: make(map[[2]int]float64)}
 }
 
-func (b *BatchDistanceCalculator) GetDistance(i, j int, algorithm string) float64 {
+// Euclidean 返回向量对 (i, j) 的缓存欧氏距离，首次访问时计算。
+// 顺序无关：(i,j) 与 (j,i) 共享同一缓存项。
+func (c *PairCache) Euclidean(i, j int) (float64, error) {
     if i == j {
-        return 0.0
+        return 0, nil
     }
-
-    // 确保一致的缓存键顺序
     if i > j {
         i, j = j, i
     }
-
-    key := fmt.Sprintf("%d-%d-%s", i, j, algorithm)
-
-    b.mutex.RLock()
-    if distance, exists := b.cache[key]; exists {
-        b.mutex.RUnlock()
-        return distance
+    key := [2]int{i, j}
+    if d, ok := c.cache[key]; ok {
+        return d, nil
     }
-    b.mutex.RUnlock()
-
-    calc := cvss.NewDistanceCalculator(b.vectors[i], b.vectors[j])
-
-    var distance float64
-    switch algorithm {
-    case "euclidean":
-        distance = calc.EuclideanDistance()
-    case "manhattan":
-        distance = calc.ManhattanDistance()
-    case "cosine":
-        distance = calc.CosineSimilarity()
-    default:
-        distance = calc.EuclideanDistance()
+    calc := cvss.NewDistanceCalculator(c.vectors[i], c.vectors[j])
+    d, err := calc.EuclideanDistanceChecked()
+    if err != nil {
+        return 0, err
     }
-
-    b.mutex.Lock()
-    b.cache[key] = distance
-    b.mutex.Unlock()
-
-    return distance
+    c.cache[key] = d
+    return d, nil
 }
 ```
 
@@ -390,15 +387,20 @@ func (b *BatchDistanceCalculator) GetDistance(i, j int, algorithm string) float6
    - 对异常值不敏感
    - 计算效率高
 
-3. **余弦相似度**
-   - 适用于方向性比较
-   - 不受向量大小影响
-   - 推荐用于文本和稀疏数据
+3. **汉明距离**
+   - 适用于类别型差异计数
+   - "改了几项指标"的直观度量
+   - 变更检测
 
-4. **雅卡德相似度**
-   - 适用于二进制特征
+4. **评分差（ScoreDifference）**
+   - 直接反映真实影响差距
+   - 判断是否跨越严重性边界
+   - 按影响增量排序向量对
+
+5. **雅卡德相似度**
+   - 适用于集合/二进制特征
    - 集合相似性分析
-   - 简单直观
+   - 去重场景
 
 ### 错误处理
 
@@ -408,8 +410,11 @@ func safeDistanceCalculation(v1, v2 *cvss.Cvss3x) (float64, error) {
         return 0, fmt.Errorf("向量不能为空")
     }
 
-    if !v1.IsValid() || !v2.IsValid() {
-        return 0, fmt.Errorf("向量无效")
+    if err := v1.Check(); err != nil {
+        return 0, fmt.Errorf("向量1无效: %w", err)
+    }
+    if err := v2.Check(); err != nil {
+        return 0, fmt.Errorf("向量2无效: %w", err)
     }
 
     calc := cvss.NewDistanceCalculator(v1, v2)

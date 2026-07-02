@@ -14,36 +14,60 @@ flowchart LR
     F2 --> M
     M --> E["Euclidean<br/>√Σ(aᵢ−bᵢ)²"]
     M --> Man["Manhattan<br/>Σ|aᵢ−bᵢ|"]
-    M --> Ch["Chebyshev<br/>max|aᵢ−bᵢ|"]
-    M --> Cos["Cosine<br/>A·B / |A||B|"]
+    M --> Ham["Hamming<br/># positions differ"]
     M --> Jac["Jaccard<br/>|A∩B| / |A∪B|"]
+    M --> Sd["ScoreDifference<br/>|scoreA − scoreB|"]
 
     classDef dist fill:#f9f0ff,stroke:#722ed1,color:#391085;
-    class E,Man,Ch,Cos,Jac dist;
+    class E,Man,Ham,Jac,Sd dist;
 ```
 
 ::: tip Distance vs similarity
-Euclidean / Manhattan / Chebyshev return **distances** (0 = identical, larger = more different). Cosine / Jaccard return **similarities** (1 = identical, 0 = disjoint). Pick per use case: clustering favors distances, deduplication favors similarities.
+Euclidean / Manhattan / Hamming / ScoreDifference return **distances** (0 = identical, larger = more different). Jaccard returns a **similarity** (1 = identical, 0 = disjoint). Pick per use case: clustering favors distances, deduplication favors similarity.
 :::
 
-## Interface Definition
+::: info Environment-aware variants
+Each metric that considers metric *values* also has a `…WithEnv` variant (e.g. `EuclideanDistanceWithEnv`) that substitutes modified environmental metrics when present. There are also `…Checked` variants (e.g. `EuclideanDistanceChecked`) that return `(float64, error)` instead of a bare `float64`.
+:::
+
+## Type Definition
+
+`DistanceCalculator` is a struct holding two `*Cvss3x` references. Construct it with `NewDistanceCalculator` and call metric methods on a `*DistanceCalculator` receiver:
 
 ```go
-type DistanceCalculator interface {
-    EuclideanDistance() float64
-    ManhattanDistance() float64
-    ChebyshevDistance() float64
-    CosineSimilarity() float64
-    JaccardSimilarity() float64
+type DistanceCalculator struct {
+    // unexported: holds the two *Cvss3x vectors
 }
+
+func NewDistanceCalculator(vector1, vector2 *Cvss3x) *DistanceCalculator
+
+// Value-based metrics
+func (dc *DistanceCalculator) EuclideanDistance() float64
+func (dc *DistanceCalculator) ManhattanDistance() float64
+func (dc *DistanceCalculator) HammingDistance() int
+func (dc *DistanceCalculator) JaccardSimilarity() float64
+func (dc *DistanceCalculator) ScoreDifference() float64
+
+// Environment-aware variants (use modified metrics when present)
+func (dc *DistanceCalculator) EuclideanDistanceWithEnv() float64
+func (dc *DistanceCalculator) ManhattanDistanceWithEnv() float64
+func (dc *DistanceCalculator) HammingDistanceWithEnv() int
+func (dc *DistanceCalculator) JaccardSimilarityWithEnv() float64
+
+// Checked variants (return an error instead of a silent 0)
+func (dc *DistanceCalculator) EuclideanDistanceChecked() (float64, error)
+func (dc *DistanceCalculator) ManhattanDistanceChecked() (float64, error)
+func (dc *DistanceCalculator) ScoreDifferenceChecked() (float64, error)
+func (dc *DistanceCalculator) EuclideanDistanceWithEnvChecked() (float64, error)
+func (dc *DistanceCalculator) ManhattanDistanceWithEnvChecked() (float64, error)
 ```
 
-## Creating Calculator
+## Creating a Calculator
 
 ### NewDistanceCalculator
 
 ```go
-func NewDistanceCalculator(vector1, vector2 *Cvss3x) DistanceCalculator
+func NewDistanceCalculator(vector1, vector2 *Cvss3x) *DistanceCalculator
 ```
 
 Creates a new distance calculator for two CVSS vectors.
@@ -53,7 +77,7 @@ Creates a new distance calculator for two CVSS vectors.
 - `vector2`: Second CVSS vector
 
 **Returns:**
-- `DistanceCalculator`: Distance calculator instance
+- `*DistanceCalculator`: Distance calculator instance
 
 **Example:**
 ```go
@@ -116,59 +140,59 @@ fmt.Printf("Manhattan distance: %.3f\n", distance)
 - Grid-based analysis
 - Feature importance analysis
 
-### ChebyshevDistance
+### HammingDistance
 
 ```go
-func (d *DistanceCalculator) ChebyshevDistance() float64
+func (dc *DistanceCalculator) HammingDistance() int
 ```
 
-Calculates the Chebyshev (L∞) distance between two vectors.
+Counts the number of metric positions at which the two vectors differ (by short value). Only metrics present on both vectors are compared.
 
 **Formula:**
 ```
-distance = max(|xi - yi|)
+distance = #{ i : xi != yi }
 ```
 
 **Returns:**
-- `float64`: Chebyshev distance
+- `int`: Number of differing positions (0 = identical on every shared metric)
 
 **Example:**
 ```go
-distance := calc.ChebyshevDistance()
-fmt.Printf("Chebyshev distance: %.3f\n", distance)
+distance := calc.HammingDistance()
+fmt.Printf("Hamming distance: %d\n", distance)
 ```
 
 **Use Cases:**
-- Maximum difference analysis
-- Worst-case scenario comparison
-- Uniform metric importance
+- Categorical difference counting
+- Quick "how many metrics changed" check
+- Change detection between vector revisions
 
-### CosineSimilarity
+### ScoreDifference
 
 ```go
-func (d *DistanceCalculator) CosineSimilarity() float64
+func (dc *DistanceCalculator) ScoreDifference() float64
 ```
 
-Calculates the cosine similarity between two vectors.
+Returns the absolute difference between the two vectors' computed scores. Unlike the metric-wise distances, this collapses the entire vector to its score first, then takes `|scoreA − scoreB|`.
 
 **Formula:**
 ```
-similarity = (A·B) / (||A|| × ||B||)
+difference = |Calculate(A) − Calculate(B)|
 ```
 
 **Returns:**
-- `float64`: Cosine similarity (-1.0 to 1.0)
+- `float64`: Absolute score difference (0.0 to 10.0)
 
 **Example:**
 ```go
-similarity := calc.CosineSimilarity()
-fmt.Printf("Cosine similarity: %.3f\n", similarity)
+diff := calc.ScoreDifference()
+fmt.Printf("Score difference: %.3f\n", diff)
 ```
 
 **Use Cases:**
-- Direction-based similarity
-- Magnitude-independent comparison
-- Text-like vector analysis
+- Severity-band change detection (e.g. did the score cross 9.0?)
+- Prioritizing which vector edits moved the score most
+- Triage: rank pairs by real-world impact delta, not metric count
 
 ### JaccardSimilarity
 
@@ -235,9 +259,9 @@ func main() {
     fmt.Printf("\nDistance Metrics:\n")
     fmt.Printf("  Euclidean: %.3f\n", calc.EuclideanDistance())
     fmt.Printf("  Manhattan: %.3f\n", calc.ManhattanDistance())
-    fmt.Printf("  Chebyshev: %.3f\n", calc.ChebyshevDistance())
+    fmt.Printf("  Hamming:   %d\n", calc.HammingDistance())
+    fmt.Printf("  Score diff: %.3f\n", calc.ScoreDifference())
     fmt.Printf("\nSimilarity Metrics:\n")
-    fmt.Printf("  Cosine: %.3f\n", calc.CosineSimilarity())
     fmt.Printf("  Jaccard: %.3f\n", calc.JaccardSimilarity())
 }
 ```
@@ -292,22 +316,22 @@ for i, cluster := range clusters {
 func calculateSimilarityMatrix(vectors []*cvss.Cvss3x) [][]float64 {
     n := len(vectors)
     matrix := make([][]float64, n)
-    
+
     for i := range matrix {
         matrix[i] = make([]float64, n)
     }
-    
+
     for i := 0; i < n; i++ {
         for j := 0; j < n; j++ {
             if i == j {
                 matrix[i][j] = 1.0 // Perfect similarity with itself
             } else {
                 calc := cvss.NewDistanceCalculator(vectors[i], vectors[j])
-                matrix[i][j] = calc.CosineSimilarity()
+                matrix[i][j] = calc.JaccardSimilarity()
             }
         }
     }
-    
+
     return matrix
 }
 
@@ -417,18 +441,22 @@ for _, idx := range anomalies {
 
 ### Distance Ranges
 
-| Distance Type | Range | Interpretation |
-|---------------|-------|----------------|
-| Euclidean | 0.0 - ~3.0 | 0.0 = identical, >2.0 = very different |
-| Manhattan | 0.0 - ~8.0 | 0.0 = identical, >6.0 = very different |
-| Chebyshev | 0.0 - 1.0 | 0.0 = identical, 1.0 = maximum difference |
-| Cosine Similarity | -1.0 - 1.0 | 1.0 = identical direction, -1.0 = opposite |
-| Jaccard Similarity | 0.0 - 1.0 | 1.0 = identical sets, 0.0 = no overlap |
+| Metric | Range | Interpretation |
+|---------|-------|----------------|
+| Euclidean | 0.0 – ~3.0 | 0.0 = identical, >2.0 = very different |
+| Manhattan | 0.0 – ~8.0 | 0.0 = identical, >6.0 = very different |
+| Hamming | 0 – (metric count) | 0 = no differing positions |
+| ScoreDifference | 0.0 – 10.0 | 0.0 = same score, 10.0 = max score gap |
+| JaccardSimilarity | 0.0 – 1.0 | 1.0 = identical sets, 0.0 = no overlap |
+
+::: warning Ranges are approximate
+The upper bounds for Euclidean/Manhattan depend on which metrics are present and their score weights. Treat the ranges as rough guides, not hard limits.
+:::
 
 ### Similarity Thresholds
 
 ```go
-func interpretSimilarity(distance float64, algorithm string) string {
+func interpretDistance(distance float64, algorithm string) string {
     switch algorithm {
     case "euclidean":
         if distance < 0.5 {
@@ -440,7 +468,8 @@ func interpretSimilarity(distance float64, algorithm string) string {
         } else {
             return "Very Different"
         }
-    case "cosine":
+    case "jaccard":
+        // jaccard is a similarity: higher = more similar
         if distance > 0.9 {
             return "Very Similar"
         } else if distance > 0.7 {
@@ -458,53 +487,42 @@ func interpretSimilarity(distance float64, algorithm string) string {
 
 ## Performance Optimization
 
-### Batch Calculation
+## Performance Optimization
+
+### Cached Pairwise Calculation
+
+`DistanceCalculator` holds no mutable state, but re-deriving the same pair repeatedly wastes work. A small cache keyed by vector pair gives O(1) repeat lookups; the `…Checked` variants surface parse/scoring errors instead of silently returning 0:
 
 ```go
-type BatchDistanceCalculator struct {
+type PairCache struct {
     vectors []*cvss.Cvss3x
-    cache   map[string]float64
+    cache   map[[2]int]float64
 }
 
-func NewBatchDistanceCalculator(vectors []*cvss.Cvss3x) *BatchDistanceCalculator {
-    return &BatchDistanceCalculator{
-        vectors: vectors,
-        cache:   make(map[string]float64),
-    }
+func NewPairCache(vectors []*cvss.Cvss3x) *PairCache {
+    return &PairCache{vectors: vectors, cache: make(map[[2]int]float64)}
 }
 
-func (b *BatchDistanceCalculator) GetDistance(i, j int, algorithm string) float64 {
+// Euclidean returns the cached Euclidean distance for the pair (i, j),
+// computing it on first access. Unordered: (i,j) and (j,i) share one entry.
+func (c *PairCache) Euclidean(i, j int) (float64, error) {
     if i == j {
-        return 0.0
+        return 0, nil
     }
-    
-    // Ensure consistent ordering for cache key
     if i > j {
         i, j = j, i
     }
-    
-    key := fmt.Sprintf("%d-%d-%s", i, j, algorithm)
-    
-    if distance, exists := b.cache[key]; exists {
-        return distance
+    key := [2]int{i, j}
+    if d, ok := c.cache[key]; ok {
+        return d, nil
     }
-    
-    calc := cvss.NewDistanceCalculator(b.vectors[i], b.vectors[j])
-    
-    var distance float64
-    switch algorithm {
-    case "euclidean":
-        distance = calc.EuclideanDistance()
-    case "manhattan":
-        distance = calc.ManhattanDistance()
-    case "cosine":
-        distance = calc.CosineSimilarity()
-    default:
-        distance = calc.EuclideanDistance()
+    calc := cvss.NewDistanceCalculator(c.vectors[i], c.vectors[j])
+    d, err := calc.EuclideanDistanceChecked()
+    if err != nil {
+        return 0, err
     }
-    
-    b.cache[key] = distance
-    return distance
+    c.cache[key] = d
+    return d, nil
 }
 ```
 
@@ -554,11 +572,13 @@ func selectBestAlgorithm(useCase string) string {
     case "clustering":
         return "euclidean"
     case "similarity":
-        return "cosine"
+        return "jaccard"
     case "anomaly_detection":
         return "manhattan"
     case "classification":
         return "euclidean"
+    case "score_impact":
+        return "score_difference"
     default:
         return "euclidean"
     }
@@ -583,11 +603,14 @@ func safeCalculateDistance(v1, v2 *cvss.Cvss3x) (float64, error) {
     if v1 == nil || v2 == nil {
         return 0, fmt.Errorf("vectors cannot be nil")
     }
-    
-    if !v1.IsValid() || !v2.IsValid() {
-        return 0, fmt.Errorf("vectors must be valid")
+
+    if err := v1.Check(); err != nil {
+        return 0, fmt.Errorf("vector 1 invalid: %w", err)
     }
-    
+    if err := v2.Check(); err != nil {
+        return 0, fmt.Errorf("vector 2 invalid: %w", err)
+    }
+
     calc := cvss.NewDistanceCalculator(v1, v2)
     return calc.EuclideanDistance(), nil
 }
