@@ -277,6 +277,78 @@ func main() {
 }
 ```
 
+### Batch Scoring
+
+```go
+func calculateBatch(vectors []string) {
+    for _, vectorStr := range vectors {
+        p := parser.NewCvss3xParser(vectorStr)
+        vector, err := p.Parse()
+        if err != nil {
+            fmt.Printf("parse failed %s: %v\n", vectorStr, err)
+            continue
+        }
+
+        calculator := cvss.NewCalculator(vector)
+        score, err := calculator.Calculate()
+        if err != nil {
+            fmt.Printf("calculate failed %s: %v\n", vectorStr, err)
+            continue
+        }
+
+        severity := calculator.GetSeverityRating(score)
+        fmt.Printf("%s -> %.1f (%s)\n", vectorStr, score, severity)
+    }
+}
+```
+
+### Detailed Analysis
+
+```go
+func detailedAnalysis(vectorStr string) {
+    p := parser.NewCvss3xParser(vectorStr)
+    vector, err := p.Parse()
+    if err != nil {
+        log.Fatalf("parse failed: %v", err)
+    }
+
+    calculator := cvss.NewCalculator(vector)
+
+    // Compute every score type
+    baseScore, _ := calculator.GetBaseScore()
+
+    var temporalScore, envScore float64
+
+    // Temporal metrics are optional
+    if vector.Cvss3xTemporal != nil {
+        temporalScore, _ = calculator.GetTemporalScore()
+    }
+
+    // Environmental metrics are optional
+    if vector.Cvss3xEnvironmental != nil {
+        envScore, _ = calculator.GetEnvironmentalScore()
+    }
+
+    finalScore, _ := calculator.Calculate()
+    severity := calculator.GetSeverityRating(finalScore)
+
+    fmt.Printf("=== CVSS Score Analysis ===\n")
+    fmt.Printf("Vector: %s\n", vectorStr)
+    fmt.Printf("Base score: %.1f\n", baseScore)
+
+    if temporalScore > 0 {
+        fmt.Printf("Temporal score: %.1f\n", temporalScore)
+    }
+
+    if envScore > 0 {
+        fmt.Printf("Environmental score: %.1f\n", envScore)
+    }
+
+    fmt.Printf("Final score: %.1f\n", finalScore)
+    fmt.Printf("Severity: %s\n", severity)
+}
+```
+
 ## Error Handling
 
 `Calculate()` returns a plain `error` when the vector is incomplete or invalid (it runs `Cvss3x.Check()` internally, which reports the first missing metric as a message string). For structured, per-metric diagnostics, call `Validate()` first — it returns `ValidationErrors`, a slice of `*ValidationError` each carrying a `Metric` and `Message`:
@@ -306,6 +378,72 @@ if err != nil {
 ::: tip Check() vs Validate()
 `Check()` (used by `Calculate()`) returns a single `error` describing the first problem; `Validate()` collects all problems into `ValidationErrors`. Prefer `Validate()` when you want to report every missing metric at once.
 :::
+
+### Validating a Vector
+
+```go
+func validateVector(vector *cvss.Cvss3x) error {
+    // Check that the base metrics are complete
+    if vector.Cvss3xBase.AttackVector == nil {
+        return fmt.Errorf("attack vector metric is missing")
+    }
+
+    if vector.Cvss3xBase.AttackComplexity == nil {
+        return fmt.Errorf("attack complexity metric is missing")
+    }
+
+    // ... check other required metrics
+
+    return nil
+}
+```
+
+## Performance Optimization
+
+### Construct a Calculator per Vector
+
+`Calculator` holds no reusable internal state and has no setters, so construct a fresh instance for each vector. Construction is a single pointer assignment — effectively free:
+
+```go
+// Batch scoring: build a new Calculator per vector
+for _, vector := range vectors {
+    calculator := cvss.NewCalculator(vector)
+    score, err := calculator.Calculate()
+    if err != nil {
+        continue
+    }
+
+    // process the score...
+}
+```
+
+### Concurrent Calculation
+
+```go
+func concurrentCalculation(vectors []*cvss.Cvss3x) []float64 {
+    results := make([]float64, len(vectors))
+    var wg sync.WaitGroup
+
+    for i, vector := range vectors {
+        wg.Add(1)
+        go func(index int, v *cvss.Cvss3x) {
+            defer wg.Done()
+
+            calculator := cvss.NewCalculator(v)
+            score, err := calculator.Calculate()
+            if err != nil {
+                results[index] = 0
+                return
+            }
+
+            results[index] = score
+        }(i, vector)
+    }
+
+    wg.Wait()
+    return results
+}
+```
 
 ## Related Documentation
 
