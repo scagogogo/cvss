@@ -4,148 +4,87 @@ CVSS Skills provides comprehensive JSON serialization and deserialization suppor
 
 ## Overview
 
-All CVSS data structures implement JSON marshaling and unmarshaling through Go's standard `encoding/json` package. The JSON format is designed to be:
+CVSS vectors support JSON through Go's standard `encoding/json` package. There are **two distinct JSON representations**, served by different APIs:
 
-- **Human-readable**: Clear field names and structure
-- **Compact**: Omits empty optional fields
-- **Interoperable**: Compatible with other CVSS implementations
-- **Versioned**: Includes version information for compatibility
+- **Vector-string form** — `json.Marshal(cvss)` / `json.Unmarshal` produce a JSON *string* whose content is the canonical vector (e.g. `"CVSS:3.1/AV:N/…"`). Compact, lossless, and the natural choice for storage and transport.
+- **Structured form** — `cvss.ToJSON(calculator)` returns a `JSONOutput` object with separated scores, severities, and per-metric long values. Use this when a consumer needs the score breakdown without re-parsing or re-scoring.
+
+Both forms round-trip cleanly; the vector-string form is the canonical serialization.
 
 ## JSON Structure
 
-### Complete CVSS Vector JSON
+### Vector-string form (`json.Marshal`)
+
+`Cvss3x` implements `MarshalJSON` / `UnmarshalJSON` so that the JSON value is the vector string itself:
+
+```json
+"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+```
+
+`MarshalIndent` on a `*Cvss3x` still yields the quoted string (there is nothing to indent) — use `ToJSON` for a pretty-printed structured object.
+
+### Structured form (`ToJSON`)
+
+`ToJSON(calculator *Calculator) ([]byte, error)` returns indented JSON with scores and metrics already filled in. The bytes it returns are already marshaled — use them directly, do **not** pass them through `json.Marshal` again (that would base64-encode the byte slice).
+
+For a vector with temporal metrics (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:F/RL:O/RC:C`):
 
 ```json
 {
-  "majorVersion": 3,
-  "minorVersion": 1,
-  "base": {
-    "attackVector": {
-      "shortName": "AV",
-      "shortValue": "N",
-      "longValue": "Network",
-      "score": 0.85
+  "version": "3.1",
+  "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:F/RL:O/RC:C",
+  "baseScore": 9.8,
+  "temporalScore": 9.1,
+  "baseSeverity": "Critical",
+  "temporalSeverity": "Critical",
+  "metrics": {
+    "base": {
+      "attackVector": "Network",
+      "attackComplexity": "Low",
+      "privilegesRequired": "None",
+      "userInteraction": "None",
+      "scope": "Unchanged",
+      "confidentiality": "High",
+      "integrity": "High",
+      "availability": "High",
+      "exploitabilityScore": 3.887,
+      "impactScore": 5.873
     },
-    "attackComplexity": {
-      "shortName": "AC",
-      "shortValue": "L",
-      "longValue": "Low",
-      "score": 0.77
-    },
-    "privilegesRequired": {
-      "shortName": "PR",
-      "shortValue": "N",
-      "longValue": "None",
-      "score": 0.85
-    },
-    "userInteraction": {
-      "shortName": "UI",
-      "shortValue": "N",
-      "longValue": "None",
-      "score": 0.85
-    },
-    "scope": {
-      "shortName": "S",
-      "shortValue": "U",
-      "longValue": "Unchanged",
-      "score": 0.0
-    },
-    "confidentialityImpact": {
-      "shortName": "C",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 0.56
-    },
-    "integrityImpact": {
-      "shortName": "I",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 0.56
-    },
-    "availabilityImpact": {
-      "shortName": "A",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 0.56
-    }
-  },
-  "temporal": {
-    "exploitCodeMaturity": {
-      "shortName": "E",
-      "shortValue": "F",
-      "longValue": "Functional",
-      "score": 0.97
-    },
-    "remediationLevel": {
-      "shortName": "RL",
-      "shortValue": "O",
-      "longValue": "Official Fix",
-      "score": 0.95
-    },
-    "reportConfidence": {
-      "shortName": "RC",
-      "shortValue": "C",
-      "longValue": "Confirmed",
-      "score": 1.0
+    "temporal": {
+      "exploitCodeMaturity": "Functional",
+      "remediationLevel": "Official Fix",
+      "reportConfidence": "Confirmed"
     }
   }
 }
 ```
 
-### Minimal Base-Only Vector JSON
+::: tip Field names follow the spec, not the struct
+Metric fields use CVSS long names (`attackVector`, `confidentiality`, `modifiedConfidentiality`, …) — there is no `Impact` suffix. Each metric value is a string long name (e.g. `"Network"`), not a nested object. Environmental metrics and `*Score` sub-scores appear only when present/computed.
+:::
+
+### Minimal base-only vector
+
+A base-only vector (no temporal/environmental) omits those keys:
 
 ```json
 {
-  "majorVersion": 3,
-  "minorVersion": 1,
-  "base": {
-    "attackVector": {
-      "shortName": "AV",
-      "shortValue": "N",
-      "longValue": "Network",
-      "score": 0.85
-    },
-    "attackComplexity": {
-      "shortName": "AC",
-      "shortValue": "L",
-      "longValue": "Low",
-      "score": 0.77
-    },
-    "privilegesRequired": {
-      "shortName": "PR",
-      "shortValue": "N",
-      "longValue": "None",
-      "score": 0.85
-    },
-    "userInteraction": {
-      "shortName": "UI",
-      "shortValue": "N",
-      "longValue": "None",
-      "score": 0.85
-    },
-    "scope": {
-      "shortName": "S",
-      "shortValue": "U",
-      "longValue": "Unchanged",
-      "score": 0.0
-    },
-    "confidentialityImpact": {
-      "shortName": "C",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 0.56
-    },
-    "integrityImpact": {
-      "shortName": "I",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 0.56
-    },
-    "availabilityImpact": {
-      "shortName": "A",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 0.56
+  "version": "3.1",
+  "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+  "baseScore": 9.8,
+  "baseSeverity": "Critical",
+  "metrics": {
+    "base": {
+      "attackVector": "Network",
+      "attackComplexity": "Low",
+      "privilegesRequired": "None",
+      "userInteraction": "None",
+      "scope": "Unchanged",
+      "confidentiality": "High",
+      "integrity": "High",
+      "availability": "High",
+      "exploitabilityScore": 3.887,
+      "impactScore": 5.873
     }
   }
 }
@@ -153,7 +92,9 @@ All CVSS data structures implement JSON marshaling and unmarshaling through Go's
 
 ## Serialization (Marshal)
 
-### Basic Serialization
+### Vector-string form
+
+`json.Marshal` on a `*Cvss3x` produces a JSON string whose content is the canonical vector:
 
 ```go
 package main
@@ -162,30 +103,47 @@ import (
     "encoding/json"
     "fmt"
     "log"
-    
-    "github.com/scagogogo/cvss-skills/pkg/cvss"
+
     "github.com/scagogogo/cvss-skills/pkg/parser"
 )
 
 func main() {
-    // Parse CVSS vector
-    p := parser.NewCvss3xParser("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
-    vector, err := p.Parse()
+    vector, err := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
     if err != nil {
         log.Fatal(err)
     }
-    
-    // Serialize to JSON
+
     jsonData, err := json.Marshal(vector)
     if err != nil {
         log.Fatal(err)
     }
-    
+
     fmt.Println(string(jsonData))
+    // "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
 }
 ```
 
-### Pretty-Printed JSON
+### Structured form (ToJSON)
+
+For a JSON object with scores and per-metric long values, use `ToJSON`. It returns already-marshaled bytes — print or write them directly:
+
+```go
+func vectorToStructuredJSON(vector *cvss.Cvss3x) ([]byte, error) {
+    calc := cvss.NewCalculator(vector)
+    return vector.ToJSON(calc)
+}
+
+// Usage
+out, err := vectorToStructuredJSON(vector)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(string(out))
+```
+
+### Pretty-printed vector string
+
+`MarshalIndent` on a `*Cvss3x` still yields the quoted vector string (nothing to indent). If you need a pretty-printed object, use `ToJSON` (above), which already indents.
 
 ```go
 func vectorToPrettyJSON(vector *cvss.Cvss3x) (string, error) {
@@ -195,13 +153,6 @@ func vectorToPrettyJSON(vector *cvss.Cvss3x) (string, error) {
     }
     return string(jsonData), nil
 }
-
-// Usage
-prettyJSON, err := vectorToPrettyJSON(vector)
-if err != nil {
-    log.Fatal(err)
-}
-fmt.Println(prettyJSON)
 ```
 
 ### Custom JSON Tags
@@ -225,9 +176,9 @@ func exportToCustomJSON(vector *cvss.Cvss3x) ([]byte, error) {
     
     export := CVSSExport{
         Vector:    vector.String(),
-        Version:   vector.GetVersion(),
+        Version:   vector.Version(),
         BaseScore: score,
-        Severity:  calculator.GetSeverityRating(score),
+        Severity:  calculator.GetSeverityRating(score).String(),
         Timestamp: time.Now().Format(time.RFC3339),
     }
     
@@ -238,6 +189,8 @@ func exportToCustomJSON(vector *cvss.Cvss3x) ([]byte, error) {
 ## Deserialization (Unmarshal)
 
 ### Basic Deserialization
+
+`json.Unmarshal` accepts the vector-string JSON form — the JSON value must be a quoted vector string:
 
 ```go
 func vectorFromJSON(jsonData []byte) (*cvss.Cvss3x, error) {
@@ -250,7 +203,7 @@ func vectorFromJSON(jsonData []byte) (*cvss.Cvss3x, error) {
 }
 
 // Usage
-jsonData := []byte(`{"majorVersion":3,"minorVersion":1,...}`)
+jsonData := []byte(`"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"`)
 vector, err := vectorFromJSON(jsonData)
 if err != nil {
     log.Fatal(err)
@@ -258,6 +211,10 @@ if err != nil {
 
 fmt.Printf("Loaded vector: %s\n", vector.String())
 ```
+
+::: warning The structured ToJSON form is not directly unmarshalable
+`ToJSON`'s `JSONOutput` shape (`{"version":…,"metrics":…}`) is an output-only representation. `json.Unmarshal` into `*Cvss3x` expects the vector-string form. To reconstruct a `Cvss3x` from a `JSONOutput`, extract its `vectorString` field and unmarshal that (or `parser.ParseString` it).
+:::
 
 ### Validation After Deserialization
 
@@ -267,18 +224,20 @@ func loadAndValidateVector(jsonData []byte) (*cvss.Cvss3x, error) {
     if err != nil {
         return nil, err
     }
-    
-    // Validate the loaded vector
-    if !vector.IsValid() {
-        return nil, fmt.Errorf("loaded vector is invalid")
+
+    // Validate the loaded vector (Check returns a plain error for the
+    // first missing/invalid metric; Validate returns structured
+    // ValidationErrors for all of them).
+    if err := vector.Check(); err != nil {
+        return nil, fmt.Errorf("loaded vector is invalid: %w", err)
     }
-    
-    // Additional validation
+
+    // Additional version check
     if vector.MajorVersion != 3 {
-        return nil, fmt.Errorf("unsupported CVSS version: %d.%d", 
+        return nil, fmt.Errorf("unsupported CVSS version: %d.%d",
             vector.MajorVersion, vector.MinorVersion)
     }
-    
+
     return vector, nil
 }
 ```
@@ -313,16 +272,18 @@ func loadVectorWithDefaults(jsonData []byte) (*cvss.Cvss3x, error) {
 
 ```go
 func saveVectorToFile(vector *cvss.Cvss3x, filename string) error {
-    jsonData, err := json.MarshalIndent(vector, "", "  ")
+    // Use ToJSON for a pretty-printed structured object, or json.Marshal
+    // for the compact vector-string form.
+    jsonData, err := vector.ToJSON(cvss.NewCalculator(vector))
     if err != nil {
         return fmt.Errorf("failed to marshal vector: %w", err)
     }
-    
-    err = ioutil.WriteFile(filename, jsonData, 0644)
+
+    err = os.WriteFile(filename, jsonData, 0644)
     if err != nil {
         return fmt.Errorf("failed to write file: %w", err)
     }
-    
+
     return nil
 }
 
@@ -337,18 +298,12 @@ if err != nil {
 
 ```go
 func loadVectorFromFile(filename string) (*cvss.Cvss3x, error) {
-    jsonData, err := ioutil.ReadFile(filename)
+    jsonData, err := os.ReadFile(filename)
     if err != nil {
         return nil, fmt.Errorf("failed to read file: %w", err)
     }
-    
-    return loadAndValidateVector(jsonData)
-}
 
-// Usage
-vector, err := loadVectorFromFile("cvss_vector.json")
-if err != nil {
-    log.Fatal(err)
+    return loadAndValidateVector(jsonData)
 }
 ```
 
@@ -397,20 +352,20 @@ func handleCVSSVector(w http.ResponseWriter, r *http.Request) {
         var request struct {
             Vector string `json:"vector"`
         }
-        
+
         if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
             http.Error(w, "Invalid JSON", http.StatusBadRequest)
             return
         }
-        
+
         // Parse CVSS vector
-        parser := parser.NewCvss3xParser(request.Vector)
-        vector, err := parser.Parse()
+        p := parser.NewCvss3xParser(request.Vector)
+        vector, err := p.Parse()
         if err != nil {
             http.Error(w, fmt.Sprintf("Parse error: %v", err), http.StatusBadRequest)
             return
         }
-        
+
         // Calculate score
         calculator := cvss.NewCalculator(vector)
         score, err := calculator.Calculate()
@@ -418,7 +373,7 @@ func handleCVSSVector(w http.ResponseWriter, r *http.Request) {
             http.Error(w, fmt.Sprintf("Calculation error: %v", err), http.StatusInternalServerError)
             return
         }
-        
+
         // Return response
         response := struct {
             Vector   *cvss.Cvss3x `json:"vector"`
@@ -427,12 +382,12 @@ func handleCVSSVector(w http.ResponseWriter, r *http.Request) {
         }{
             Vector:   vector,
             Score:    score,
-            Severity: calculator.GetSeverityRating(score),
+            Severity: calculator.GetSeverityRating(score).String(),
         }
-        
+
         w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(response)
-        
+
     case "GET":
         // Return example vector
         example := getExampleVector()
@@ -444,24 +399,30 @@ func handleCVSSVector(w http.ResponseWriter, r *http.Request) {
 
 ### JSON Schema Validation
 
+If you must validate the structured `ToJSON` form against a schema (e.g. at an API boundary before parsing), it matches this shape:
+
 ```go
 import "github.com/xeipuuv/gojsonschema"
 
 const cvssJSONSchema = `{
   "type": "object",
-  "required": ["majorVersion", "minorVersion", "base"],
+  "required": ["version", "vectorString", "baseScore", "baseSeverity", "metrics"],
   "properties": {
-    "majorVersion": {
-      "type": "integer",
-      "enum": [3]
-    },
-    "minorVersion": {
-      "type": "integer",
-      "enum": [0, 1]
-    },
-    "base": {
+    "version": { "type": "string", "enum": ["3.0", "3.1"] },
+    "vectorString": { "type": "string" },
+    "baseScore": { "type": "number", "minimum": 0, "maximum": 10 },
+    "baseSeverity": { "type": "string", "enum": ["None", "Low", "Medium", "High", "Critical"] },
+    "metrics": {
       "type": "object",
-      "required": ["attackVector", "attackComplexity", "privilegesRequired", "userInteraction", "scope", "confidentialityImpact", "integrityImpact", "availabilityImpact"]
+      "required": ["base"],
+      "properties": {
+        "base": {
+          "type": "object",
+          "required": ["attackVector", "attackComplexity", "privilegesRequired",
+                       "userInteraction", "scope", "confidentiality",
+                       "integrity", "availability"]
+        }
+      }
     }
   }
 }`
@@ -469,12 +430,12 @@ const cvssJSONSchema = `{
 func validateCVSSJSON(jsonData []byte) error {
     schemaLoader := gojsonschema.NewStringLoader(cvssJSONSchema)
     documentLoader := gojsonschema.NewBytesLoader(jsonData)
-    
+
     result, err := gojsonschema.Validate(schemaLoader, documentLoader)
     if err != nil {
         return err
     }
-    
+
     if !result.Valid() {
         var errors []string
         for _, desc := range result.Errors() {
@@ -482,10 +443,14 @@ func validateCVSSJSON(jsonData []byte) error {
         }
         return fmt.Errorf("validation errors: %s", strings.Join(errors, "; "))
     }
-    
+
     return nil
 }
 ```
+
+::: tip Prefer parsing over schema validation
+The most reliable validation is to `parser.ParseString(vectorString)` (or `json.Unmarshal` the vector-string form) and then `Check()` / `Validate()` the result. Schema validation only checks shape; the library checks CVSS semantics.
+:::
 
 ## Database Integration
 
@@ -610,16 +575,16 @@ func safeJSONOperation(vector *cvss.Cvss3x) ([]byte, error) {
     if vector == nil {
         return nil, fmt.Errorf("vector cannot be nil")
     }
-    
-    if !vector.IsValid() {
-        return nil, fmt.Errorf("vector is not valid")
+
+    if err := vector.Check(); err != nil {
+        return nil, fmt.Errorf("vector is not valid: %w", err)
     }
-    
+
     jsonData, err := json.Marshal(vector)
     if err != nil {
         return nil, fmt.Errorf("JSON marshaling failed: %w", err)
     }
-    
+
     return jsonData, nil
 }
 ```

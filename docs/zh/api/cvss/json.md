@@ -4,143 +4,97 @@ CVSS Skills 提供全面的 JSON 序列化和反序列化支持，便于数据�
 
 ## 概述
 
-所有 CVSS 数据结构都通过 Go 标准的 `encoding/json` 包实现 JSON 编组和解组。JSON 格式设计为：
+CVSS 向量通过 Go 标准的 `encoding/json` 包支持 JSON。存在**两种截然不同的 JSON 表示**，由不同的 API 提供：
 
-- **人类可读**: 清晰的字段名称和结构
-- **紧凑**: 省略空的可选字段
-- **互操作**: 与其他 CVSS 实现兼容
-- **版本化**: 包含版本信息以确保兼容性
+- **向量字符串形式** —— `json.Marshal(cvss)` / `json.Unmarshal` 产生一个 JSON *字符串*，其内容为规范向量（例如 `"CVSS:3.1/AV:N/…"`）。紧凑、无损，是存储和传输的自然之选。
+- **结构化形式** —— `cvss.ToJSON(calculator)` 返回一个 `JSONOutput` 对象，包含已分离的评分、严重性和各指标长值。当消费方需要评分明细而又不想重新解析或重新评分时使用。
+
+两种形式都能干净地往返；向量字符串形式是规范的序列化方式。
 
 ## JSON 结构
 
-### 完整的 CVSS 向量 JSON
+### 向量字符串形式（`json.Marshal`）
+
+`Cvss3x` 实现了 `MarshalJSON` / `UnmarshalJSON`，使得 JSON 值就是向量字符串本身：
+
+```json
+"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+```
+
+对 `*Cvss3x` 调用 `MarshalIndent` 仍然只产生这个带引号的字符串（没有任何东西需要缩进）—— 若要格式化的结构化对象，请使用 `ToJSON`。
+
+### 结构化形式（`ToJSON`）
+
+`ToJSON(calculator *Calculator) ([]byte, error)` 返回带缩进的 JSON，评分和指标已填充完毕。它返回的字节**已经过 marshal**——直接使用即可，**不要**再通过 `json.Marshal` 传递（那样会把 byte slice 做 base64 编码）。
+
+对于带时间指标的向量（`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:F/RL:O/RC:C`）：
 
 ```json
 {
-  "majorVersion": 3,
-  "minorVersion": 1,
-  "base": {
-    "attackVector": {
-      "shortName": "AV",
-      "shortValue": "N",
-      "longValue": "Network",
-      "score": 0.85
+  "version": "3.1",
+  "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:F/RL:O/RC:C",
+  "baseScore": 9.8,
+  "temporalScore": 9.1,
+  "baseSeverity": "Critical",
+  "temporalSeverity": "Critical",
+  "metrics": {
+    "base": {
+      "attackVector": "Network",
+      "attackComplexity": "Low",
+      "privilegesRequired": "None",
+      "userInteraction": "None",
+      "scope": "Unchanged",
+      "confidentiality": "High",
+      "integrity": "High",
+      "availability": "High",
+      "exploitabilityScore": 3.887,
+      "impactScore": 5.873
     },
-    "attackComplexity": {
-      "shortName": "AC",
-      "shortValue": "L",
-      "longValue": "Low",
-      "score": 0.77
-    },
-    "privilegesRequired": {
-      "shortName": "PR",
-      "shortValue": "N",
-      "longValue": "None",
-      "score": 0.85
-    },
-    "userInteraction": {
-      "shortName": "UI",
-      "shortValue": "N",
-      "longValue": "None",
-      "score": 0.85
-    },
-    "scope": {
-      "shortName": "S",
-      "shortValue": "U",
-      "longValue": "Unchanged",
-      "score": 1.0
-    },
-    "confidentialityImpact": {
-      "shortName": "C",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 0.56
-    },
-    "integrityImpact": {
-      "shortName": "I",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 0.56
-    },
-    "availabilityImpact": {
-      "shortName": "A",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 0.56
+    "temporal": {
+      "exploitCodeMaturity": "Functional",
+      "remediationLevel": "Official Fix",
+      "reportConfidence": "Confirmed"
     }
   }
 }
 ```
 
-### 带时间指标的 JSON
+::: tip 字段名遵循规范，而非结构体
+指标字段使用 CVSS 长名称（`attackVector`、`confidentiality`、`modifiedConfidentiality`……）——没有 `Impact` 后缀。每个指标值是一个字符串长名称（例如 `"Network"`），而非嵌套对象。环境指标和 `*Score` 子评分仅在存在/已计算时出现。
+:::
+
+### 最小的纯基础向量
+
+纯基础向量（无时间/环境指标）会省略这些键：
 
 ```json
 {
-  "majorVersion": 3,
-  "minorVersion": 1,
-  "base": { /* 基础指标 */ },
-  "temporal": {
-    "exploitCodeMaturity": {
-      "shortName": "E",
-      "shortValue": "F",
-      "longValue": "Functional",
-      "score": 0.97
-    },
-    "remediationLevel": {
-      "shortName": "RL",
-      "shortValue": "O",
-      "longValue": "Official Fix",
-      "score": 0.95
-    },
-    "reportConfidence": {
-      "shortName": "RC",
-      "shortValue": "C",
-      "longValue": "Confirmed",
-      "score": 1.0
+  "version": "3.1",
+  "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+  "baseScore": 9.8,
+  "baseSeverity": "Critical",
+  "metrics": {
+    "base": {
+      "attackVector": "Network",
+      "attackComplexity": "Low",
+      "privilegesRequired": "None",
+      "userInteraction": "None",
+      "scope": "Unchanged",
+      "confidentiality": "High",
+      "integrity": "High",
+      "availability": "High",
+      "exploitabilityScore": 3.887,
+      "impactScore": 5.873
     }
   }
 }
 ```
 
-### 带环境指标的 JSON
+## 序列化操作（Marshal）
 
-```json
-{
-  "majorVersion": 3,
-  "minorVersion": 1,
-  "base": { /* 基础指标 */ },
-  "environmental": {
-    "confidentialityRequirement": {
-      "shortName": "CR",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 1.5
-    },
-    "integrityRequirement": {
-      "shortName": "IR",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 1.5
-    },
-    "availabilityRequirement": {
-      "shortName": "AR",
-      "shortValue": "H",
-      "longValue": "High",
-      "score": 1.5
-    },
-    "modifiedAttackVector": {
-      "shortName": "MAV",
-      "shortValue": "L",
-      "longValue": "Local",
-      "score": 0.62
-    }
-  }
-}
-```
+### 向量字符串形式
 
-## 序列化操作
-
-### 基本序列化
+对 `*Cvss3x` 调用 `json.Marshal` 产生一个 JSON 字符串，其内容为规范向量：
 
 ```go
 package main
@@ -150,98 +104,147 @@ import (
     "fmt"
     "log"
 
-    "github.com/scagogogo/cvss-skills/pkg/cvss"
     "github.com/scagogogo/cvss-skills/pkg/parser"
 )
 
 func main() {
-    // 解析 CVSS 向量
-    vectorStr := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-    p := parser.NewCvss3xParser(vectorStr)
-    vector, err := p.Parse()
+    vector, err := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
     if err != nil {
         log.Fatal(err)
     }
 
-    // 序列化为 JSON
     jsonData, err := json.Marshal(vector)
     if err != nil {
         log.Fatal(err)
     }
 
-    fmt.Println("紧凑 JSON:")
     fmt.Println(string(jsonData))
+    // "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
 }
 ```
 
-### 格式化输出
+### 结构化形式（ToJSON）
+
+若要带评分和各指标长值的 JSON 对象，请使用 `ToJSON`。它返回已经过 marshal 的字节——直接打印或写入即可：
 
 ```go
-func prettyPrintJSON(vector *cvss.Cvss3x) {
-    // 格式化输出，带缩进
+func vectorToStructuredJSON(vector *cvss.Cvss3x) ([]byte, error) {
+    calc := cvss.NewCalculator(vector)
+    return vector.ToJSON(calc)
+}
+
+// 用法
+out, err := vectorToStructuredJSON(vector)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(string(out))
+```
+
+### 格式化的向量字符串
+
+对 `*Cvss3x` 调用 `MarshalIndent` 仍然只产生带引号的向量字符串（无可缩进内容）。若需要格式化的对象，请使用上面的 `ToJSON`（它已经带缩进）。
+
+```go
+func vectorToPrettyJSON(vector *cvss.Cvss3x) (string, error) {
     jsonData, err := json.MarshalIndent(vector, "", "  ")
     if err != nil {
-        log.Fatal(err)
+        return "", err
     }
-
-    fmt.Println("格式化 JSON:")
-    fmt.Println(string(jsonData))
+    return string(jsonData), nil
 }
 ```
 
-### 自定义 JSON 格式
+### 自定义 JSON 标签
 
 ```go
-type SimplifiedVector struct {
-    Vector   string  `json:"cvss_vector"`
-    Version  string  `json:"version"`
-    Score    float64 `json:"base_score"`
-    Severity string  `json:"severity"`
+// 带特定 JSON 格式的自定义结构体
+type CVSSExport struct {
+    Vector    string  `json:"cvss_vector"`
+    Version   string  `json:"version"`
+    BaseScore float64 `json:"base_score"`
+    Severity  string  `json:"severity"`
+    Timestamp string  `json:"timestamp"`
 }
 
-func exportSimplified(vector *cvss.Cvss3x) ([]byte, error) {
+func exportToCustomJSON(vector *cvss.Cvss3x) ([]byte, error) {
     calculator := cvss.NewCalculator(vector)
     score, err := calculator.Calculate()
     if err != nil {
         return nil, err
     }
 
-    simplified := SimplifiedVector{
-        Vector:   vector.String(),
-        Version:  vector.GetVersion(),
-        Score:    score,
-        Severity: calculator.GetSeverityRating(score),
+    export := CVSSExport{
+        Vector:    vector.String(),
+        Version:   vector.Version(),
+        BaseScore: score,
+        Severity:  calculator.GetSeverityRating(score).String(),
+        Timestamp: time.Now().Format(time.RFC3339),
     }
 
-    return json.MarshalIndent(simplified, "", "  ")
+    return json.MarshalIndent(export, "", "  ")
 }
 ```
 
-## 反序列化操作
+## 反序列化操作（Unmarshal）
 
 ### 基本反序列化
 
+`json.Unmarshal` 接受向量字符串 JSON 形式——JSON 值必须是一个带引号的向量字符串：
+
 ```go
-func loadFromJSON(jsonData []byte) (*cvss.Cvss3x, error) {
+func vectorFromJSON(jsonData []byte) (*cvss.Cvss3x, error) {
     var vector cvss.Cvss3x
     err := json.Unmarshal(jsonData, &vector)
     if err != nil {
         return nil, fmt.Errorf("JSON 解组失败: %w", err)
     }
+    return &vector, nil
+}
 
-    // 验证加载的向量
-    if !vector.IsValid() {
-        return nil, fmt.Errorf("加载的向量无效")
+// 用法
+jsonData := []byte(`"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"`)
+vector, err := vectorFromJSON(jsonData)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("已加载向量: %s\n", vector.String())
+```
+
+::: warning 结构化的 ToJSON 形式不能直接反序列化
+`ToJSON` 的 `JSONOutput` 形状（`{"version":…,"metrics":…}`）是一个仅用于输出的表示。`json.Unmarshal` 到 `*Cvss3x` 期望的是向量字符串形式。若要从 `JSONOutput` 重构 `Cvss3x`，请提取其 `vectorString` 字段并对其进行反序列化（或用 `parser.ParseString` 解析）。
+:::
+
+### 反序列化后验证
+
+```go
+func loadAndValidateVector(jsonData []byte) (*cvss.Cvss3x, error) {
+    vector, err := vectorFromJSON(jsonData)
+    if err != nil {
+        return nil, err
     }
 
-    return &vector, nil
+    // 验证加载的向量（Check 对第一个缺失/无效的指标返回普通 error；
+    // Validate 对所有指标返回结构化的 ValidationErrors）。
+    if err := vector.Check(); err != nil {
+        return nil, fmt.Errorf("加载的向量无效: %w", err)
+    }
+
+    // 额外的版本检查
+    if vector.MajorVersion != 3 {
+        return nil, fmt.Errorf("不支持的 CVSS 版本: %d.%d",
+            vector.MajorVersion, vector.MinorVersion)
+    }
+
+    return vector, nil
 }
 ```
 
-### 安全反序列化
+### 处理缺失字段
 
 ```go
-func safeLoadFromJSON(jsonData []byte) (*cvss.Cvss3x, error) {
+func loadVectorWithDefaults(jsonData []byte) (*cvss.Cvss3x, error) {
     var vector cvss.Cvss3x
 
     // 解组前设置默认值
@@ -250,47 +253,15 @@ func safeLoadFromJSON(jsonData []byte) (*cvss.Cvss3x, error) {
 
     err := json.Unmarshal(jsonData, &vector)
     if err != nil {
-        return nil, fmt.Errorf("JSON 解组失败: %w", err)
+        return nil, err
     }
 
-    // 加载后验证
-    if vector.MajorVersion != 3 {
-        return nil, fmt.Errorf("不支持的 CVSS 版本: %d.%d", 
-            vector.MajorVersion, vector.MinorVersion)
-    }
-
+    // 如有需要，用默认值填充缺失的基础指标
     if vector.Cvss3xBase == nil {
-        return nil, fmt.Errorf("缺少基础指标")
+        return nil, fmt.Errorf("基础指标是必需的")
     }
 
     return &vector, nil
-}
-```
-
-### 往返验证
-
-```go
-func validateRoundTrip(original *cvss.Cvss3x) error {
-    // 序列化为 JSON
-    jsonData, err := json.Marshal(original)
-    if err != nil {
-        return fmt.Errorf("序列化失败: %w", err)
-    }
-
-    // 反序列化回来
-    restored, err := loadFromJSON(jsonData)
-    if err != nil {
-        return fmt.Errorf("反序列化失败: %w", err)
-    }
-
-    // 比较向量字符串
-    if original.String() != restored.String() {
-        return fmt.Errorf("往返验证失败: %s != %s", 
-            original.String(), restored.String())
-    }
-
-    fmt.Println("✓ 往返验证成功")
-    return nil
 }
 ```
 
@@ -299,57 +270,56 @@ func validateRoundTrip(original *cvss.Cvss3x) error {
 ### 保存到文件
 
 ```go
-func saveToFile(vector *cvss.Cvss3x, filename string) error {
-    jsonData, err := json.MarshalIndent(vector, "", "  ")
+func saveVectorToFile(vector *cvss.Cvss3x, filename string) error {
+    // 使用 ToJSON 获得格式化的结构化对象，或用 json.Marshal
+    // 获得紧凑的向量字符串形式。
+    jsonData, err := vector.ToJSON(cvss.NewCalculator(vector))
     if err != nil {
         return fmt.Errorf("JSON 编组失败: %w", err)
     }
 
-    err = ioutil.WriteFile(filename, jsonData, 0644)
+    err = os.WriteFile(filename, jsonData, 0644)
     if err != nil {
         return fmt.Errorf("文件写入失败: %w", err)
     }
 
-    fmt.Printf("向量已保存到 %s\n", filename)
     return nil
+}
+
+// 用法
+err := saveVectorToFile(vector, "cvss_vector.json")
+if err != nil {
+    log.Fatal(err)
 }
 ```
 
 ### 从文件加载
 
 ```go
-func loadFromFile(filename string) (*cvss.Cvss3x, error) {
-    jsonData, err := ioutil.ReadFile(filename)
+func loadVectorFromFile(filename string) (*cvss.Cvss3x, error) {
+    jsonData, err := os.ReadFile(filename)
     if err != nil {
         return nil, fmt.Errorf("文件读取失败: %w", err)
     }
 
-    return safeLoadFromJSON(jsonData)
+    return loadAndValidateVector(jsonData)
 }
 ```
 
 ### 批量文件操作
 
 ```go
-func saveBatchToFiles(vectors []*cvss.Cvss3x, directory string) error {
-    // 创建目录（如果不存在）
-    err := os.MkdirAll(directory, 0755)
-    if err != nil {
-        return err
-    }
-
+func saveVectorBatch(vectors []*cvss.Cvss3x, directory string) error {
     for i, vector := range vectors {
-        filename := filepath.Join(directory, fmt.Sprintf("vector_%03d.json", i+1))
-        if err := saveToFile(vector, filename); err != nil {
+        filename := filepath.Join(directory, fmt.Sprintf("vector_%d.json", i+1))
+        if err := saveVectorToFile(vector, filename); err != nil {
             return fmt.Errorf("保存向量 %d 失败: %w", i+1, err)
         }
     }
-
-    fmt.Printf("已保存 %d 个向量到 %s\n", len(vectors), directory)
     return nil
 }
 
-func loadBatchFromFiles(directory string) ([]*cvss.Cvss3x, error) {
+func loadVectorBatch(directory string) ([]*cvss.Cvss3x, error) {
     files, err := filepath.Glob(filepath.Join(directory, "*.json"))
     if err != nil {
         return nil, err
@@ -357,30 +327,29 @@ func loadBatchFromFiles(directory string) ([]*cvss.Cvss3x, error) {
 
     var vectors []*cvss.Cvss3x
     for _, file := range files {
-        vector, err := loadFromFile(file)
+        vector, err := loadVectorFromFile(file)
         if err != nil {
-            fmt.Printf("警告: 加载 %s 失败: %v\n", file, err)
+            log.Printf("警告: 加载 %s 失败: %v", file, err)
             continue
         }
         vectors = append(vectors, vector)
     }
 
-    fmt.Printf("从 %s 加载了 %d 个向量\n", directory, len(vectors))
     return vectors, nil
 }
 ```
 
-## API 集成
+## HTTP API 集成
 
-### HTTP API 处理器
+### REST API 处理器
 
 ```go
-func handleVectorAnalysis(w http.ResponseWriter, r *http.Request) {
+func handleCVSSVector(w http.ResponseWriter, r *http.Request) {
     switch r.Method {
     case "POST":
+        // 从请求体解析向量
         var request struct {
             Vector string `json:"vector"`
-            Format string `json:"format,omitempty"`
         }
 
         if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -388,141 +357,148 @@ func handleVectorAnalysis(w http.ResponseWriter, r *http.Request) {
             return
         }
 
-        // 解析向量
-        parser := parser.NewCvss3xParser(request.Vector)
-        vector, err := parser.Parse()
+        // 解析 CVSS 向量
+        p := parser.NewCvss3xParser(request.Vector)
+        vector, err := p.Parse()
         if err != nil {
             http.Error(w, fmt.Sprintf("解析错误: %v", err), http.StatusBadRequest)
             return
         }
 
-        // 根据格式生成响应
-        var responseData []byte
-        switch request.Format {
-        case "simplified":
-            responseData, err = exportSimplified(vector)
-        default:
-            responseData, err = json.MarshalIndent(vector, "", "  ")
-        }
-
+        // 计算评分
+        calculator := cvss.NewCalculator(vector)
+        score, err := calculator.Calculate()
         if err != nil {
-            http.Error(w, fmt.Sprintf("导出错误: %v", err), http.StatusInternalServerError)
+            http.Error(w, fmt.Sprintf("计算错误: %v", err), http.StatusInternalServerError)
             return
         }
 
-        w.Header().Set("Content-Type", "application/json")
-        w.Write(responseData)
+        // 返回响应
+        response := struct {
+            Vector   *cvss.Cvss3x `json:"vector"`
+            Score    float64      `json:"score"`
+            Severity string       `json:"severity"`
+        }{
+            Vector:   vector,
+            Score:    score,
+            Severity: calculator.GetSeverityRating(score).String(),
+        }
 
-    default:
-        http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(response)
+
+    case "GET":
+        // 返回示例向量
+        example := getExampleVector()
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(example)
     }
 }
 ```
 
-### 批量 API 处理器
+### JSON Schema 验证
+
+若必须针对 schema 验证结构化的 `ToJSON` 形式（例如在解析前的 API 边界处），它匹配如下形状：
 
 ```go
-func handleBatchAnalysis(w http.ResponseWriter, r *http.Request) {
-    var request struct {
-        Vectors []string `json:"vectors"`
-        Format  string   `json:"format,omitempty"`
-    }
+import "github.com/xeipuuv/gojsonschema"
 
-    if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-        http.Error(w, "无效的 JSON", http.StatusBadRequest)
-        return
-    }
-
-    var results []interface{}
-
-    for i, vectorStr := range request.Vectors {
-        result := map[string]interface{}{
-            "index":  i,
-            "vector": vectorStr,
+const cvssJSONSchema = `{
+  "type": "object",
+  "required": ["version", "vectorString", "baseScore", "baseSeverity", "metrics"],
+  "properties": {
+    "version": { "type": "string", "enum": ["3.0", "3.1"] },
+    "vectorString": { "type": "string" },
+    "baseScore": { "type": "number", "minimum": 0, "maximum": 10 },
+    "baseSeverity": { "type": "string", "enum": ["None", "Low", "Medium", "High", "Critical"] },
+    "metrics": {
+      "type": "object",
+      "required": ["base"],
+      "properties": {
+        "base": {
+          "type": "object",
+          "required": ["attackVector", "attackComplexity", "privilegesRequired",
+                       "userInteraction", "scope", "confidentiality",
+                       "integrity", "availability"]
         }
+      }
+    }
+  }
+}`
 
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
-        if err != nil {
-            result["error"] = err.Error()
-            results = append(results, result)
-            continue
-        }
+func validateCVSSJSON(jsonData []byte) error {
+    schemaLoader := gojsonschema.NewStringLoader(cvssJSONSchema)
+    documentLoader := gojsonschema.NewBytesLoader(jsonData)
 
-        calculator := cvss.NewCalculator(vector)
-        score, _ := calculator.Calculate()
-
-        switch request.Format {
-        case "simplified":
-            result["score"] = score
-            result["severity"] = calculator.GetSeverityRating(score)
-        default:
-            result["parsed"] = vector
-            result["score"] = score
-            result["severity"] = calculator.GetSeverityRating(score)
-        }
-
-        results = append(results, result)
+    result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+    if err != nil {
+        return err
     }
 
-    response := map[string]interface{}{
-        "results": results,
-        "total":   len(request.Vectors),
+    if !result.Valid() {
+        var errors []string
+        for _, desc := range result.Errors() {
+            errors = append(errors, desc.String())
+        }
+        return fmt.Errorf("验证错误: %s", strings.Join(errors, "; "))
     }
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(response)
+    return nil
 }
 ```
+
+::: tip 优先解析而非 schema 验证
+最可靠的验证方式是 `parser.ParseString(vectorString)`（或对向量字符串形式 `json.Unmarshal`），然后对结果调用 `Check()` / `Validate()`。Schema 验证只检查形状；库会检查 CVSS 语义。
+:::
 
 ## 数据库集成
 
 ### SQL 数据库存储
 
 ```go
-func saveVectorToDB(db *sql.DB, vector *cvss.Cvss3x) error {
-    calculator := cvss.NewCalculator(vector)
-    score, err := calculator.Calculate()
-    if err != nil {
-        return err
-    }
+import "database/sql"
 
+func saveVectorToDB(db *sql.DB, vector *cvss.Cvss3x) error {
     jsonData, err := json.Marshal(vector)
     if err != nil {
         return err
     }
 
-    query := `
-        INSERT INTO cvss_vectors (
-            vector_string, 
-            score, 
-            severity, 
-            json_data, 
-            created_at
-        ) VALUES (?, ?, ?, ?, ?)
-    `
-
-    _, err = db.Exec(query,
-        vector.String(),
-        score,
-        calculator.GetSeverityRating(score),
-        string(jsonData),
-        time.Now(),
-    )
-
+    query := `INSERT INTO cvss_vectors (vector_string, json_data, created_at) VALUES (?, ?, ?)`
+    _, err = db.Exec(query, vector.String(), string(jsonData), time.Now())
     return err
 }
 
 func loadVectorFromDB(db *sql.DB, id int) (*cvss.Cvss3x, error) {
     var jsonData string
     query := `SELECT json_data FROM cvss_vectors WHERE id = ?`
-    
     err := db.QueryRow(query, id).Scan(&jsonData)
     if err != nil {
         return nil, err
     }
 
-    return safeLoadFromJSON([]byte(jsonData))
+    return vectorFromJSON([]byte(jsonData))
+}
+```
+
+### NoSQL 数据库存储
+
+```go
+import "go.mongodb.org/mongo-driver/mongo"
+
+func saveVectorToMongo(collection *mongo.Collection, vector *cvss.Cvss3x) error {
+    document := struct {
+        VectorString string       `bson:"vector_string"`
+        Vector       *cvss.Cvss3x `bson:"vector"`
+        CreatedAt    time.Time    `bson:"created_at"`
+    }{
+        VectorString: vector.String(),
+        Vector:       vector,
+        CreatedAt:    time.Now(),
+    }
+
+    _, err := collection.InsertOne(context.Background(), document)
+    return err
 }
 ```
 
@@ -531,7 +507,7 @@ func loadVectorFromDB(db *sql.DB, id int) (*cvss.Cvss3x, error) {
 ### 流式 JSON
 
 ```go
-func streamVectorsToJSON(vectors []*cvss.Cvss3x, w io.Writer) error {
+func streamVectors(vectors []*cvss.Cvss3x, w io.Writer) error {
     encoder := json.NewEncoder(w)
 
     // 写入数组开始
@@ -553,7 +529,7 @@ func streamVectorsToJSON(vectors []*cvss.Cvss3x, w io.Writer) error {
 }
 ```
 
-### 内存高效处理
+### 内存高效加载
 
 ```go
 func processLargeJSONFile(filename string, processor func(*cvss.Cvss3x) error) error {
@@ -591,70 +567,71 @@ func processLargeJSONFile(filename string, processor func(*cvss.Cvss3x) error) e
 
 ## 最佳实践
 
-### JSON 模式验证
+### 1. 错误处理
 
 ```go
-const cvssJSONSchema = `{
-  "type": "object",
-  "required": ["majorVersion", "minorVersion", "base"],
-  "properties": {
-    "majorVersion": {"type": "integer", "enum": [3]},
-    "minorVersion": {"type": "integer", "enum": [0, 1]},
-    "base": {"type": "object"}
-  }
-}`
-
-func validateJSONSchema(jsonData []byte) error {
-    schemaLoader := gojsonschema.NewStringLoader(cvssJSONSchema)
-    documentLoader := gojsonschema.NewBytesLoader(jsonData)
-
-    result, err := gojsonschema.Validate(schemaLoader, documentLoader)
-    if err != nil {
-        return err
+func safeJSONOperation(vector *cvss.Cvss3x) ([]byte, error) {
+    if vector == nil {
+        return nil, fmt.Errorf("向量不能为空")
     }
 
-    if !result.Valid() {
-        var errors []string
-        for _, desc := range result.Errors() {
-            errors = append(errors, desc.String())
-        }
-        return fmt.Errorf("验证错误: %s", strings.Join(errors, "; "))
+    if err := vector.Check(); err != nil {
+        return nil, fmt.Errorf("向量无效: %w", err)
+    }
+
+    jsonData, err := json.Marshal(vector)
+    if err != nil {
+        return nil, fmt.Errorf("JSON 编组失败: %w", err)
+    }
+
+    return jsonData, nil
+}
+```
+
+### 2. 版本兼容性
+
+```go
+func ensureCompatibility(vector *cvss.Cvss3x) error {
+    if vector.MajorVersion != 3 {
+        return fmt.Errorf("不支持的主版本: %d", vector.MajorVersion)
+    }
+
+    if vector.MinorVersion < 0 || vector.MinorVersion > 1 {
+        return fmt.Errorf("不支持的次版本: %d", vector.MinorVersion)
     }
 
     return nil
 }
 ```
 
-### 错误处理
+### 3. 数据完整性
 
 ```go
-func robustJSONProcessing(jsonData []byte) (*cvss.Cvss3x, error) {
-    // 输入验证
-    if len(jsonData) == 0 {
-        return nil, fmt.Errorf("JSON 数据为空")
-    }
-
-    if len(jsonData) > 1024*1024 { // 1MB 限制
-        return nil, fmt.Errorf("JSON 数据过大: %d 字节", len(jsonData))
-    }
-
-    // 模式验证
-    if err := validateJSONSchema(jsonData); err != nil {
-        return nil, fmt.Errorf("模式验证失败: %w", err)
-    }
-
-    // 安全加载
-    vector, err := safeLoadFromJSON(jsonData)
+func verifyJSONRoundTrip(original *cvss.Cvss3x) error {
+    // 序列化
+    jsonData, err := json.Marshal(original)
     if err != nil {
-        return nil, fmt.Errorf("加载失败: %w", err)
+        return err
     }
 
-    return vector, nil
+    // 反序列化
+    var restored cvss.Cvss3x
+    if err := json.Unmarshal(jsonData, &restored); err != nil {
+        return err
+    }
+
+    // 比较
+    if original.String() != restored.String() {
+        return fmt.Errorf("往返验证失败")
+    }
+
+    return nil
 }
 ```
 
 ## 相关文档
 
 - [CVSS 数据结构](/zh/api/cvss/cvss3x) - 了解数据结构
-- [JSON 示例](/zh/examples/json) - 详细使用示例
-- [API 集成指南](/zh/api/getting-started) - 生产环境集成模式
+- [Calculator 计算器](/zh/api/cvss/calculator) - 评分计算
+- [Parser 解析器](/zh/api/parser/cvss3x-parser) - 向量解析
+- [使用示例](/zh/examples/json) - 详细使用示例
