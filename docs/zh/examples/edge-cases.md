@@ -48,8 +48,7 @@ func main() {
         fmt.Printf("测试 %d: %s\n", i+1, test.description)
         fmt.Printf("向量: %s\n", test.vector)
         
-        parser := parser.NewCvss3xParser(test.vector)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(test.vector)
         
         if err != nil {
             fmt.Printf("✓ 预期错误: %v\n", err)
@@ -103,8 +102,7 @@ func testBoundaryValues() {
         fmt.Printf("测试 %d: %s\n", i+1, test.description)
         fmt.Printf("向量: %s\n", test.vector)
         
-        parser := parser.NewCvss3xParser(test.vector)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(test.vector)
         
         if test.expectError {
             if err != nil {
@@ -145,8 +143,7 @@ func testLargeVectorProcessing() {
     errorCount := 0
     
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         
         if err != nil {
             errorCount++
@@ -221,8 +218,7 @@ func testMemoryUsage() {
     // 处理许多向量
     for i := 0; i < 100000; i++ {
         vectorStr := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         
         if err == nil {
             calculator := cvss.NewCalculator(vector)
@@ -272,8 +268,7 @@ func testConcurrentParsing() {
         go func(id int) {
             defer wg.Done()
             
-            parser := parser.NewCvss3xParser(vectorStr)
-            vector, err := parser.Parse()
+            vector, err := parser.ParseString(vectorStr)
             
             mutex.Lock()
             if err != nil {
@@ -325,8 +320,7 @@ func testResourceExhaustion() {
         fmt.Printf("测试 %d: 向量长度 %d 字符\n", i+1, len(vectorStr))
         
         start := time.Now()
-        parser := parser.NewCvss3xParser(vectorStr)
-        _, err := parser.Parse()
+        _, err := parser.ParseString(vectorStr)
         duration := time.Since(start)
         
         if err != nil {
@@ -399,8 +393,7 @@ func processVectorsWithRecovery(vectors []string) ProcessingResults {
                 }
             }()
             
-            parser := parser.NewCvss3xParser(vectorStr)
-            vector, err := parser.Parse()
+            vector, err := parser.ParseString(vectorStr)
             
             if err != nil {
                 results.Failed++
@@ -476,8 +469,7 @@ type FallbackResult struct {
 
 func parseWithFallback(vectorStr string) FallbackResult {
     // 尝试主要解析
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, err := parser.Parse()
+    vector, err := parser.ParseString(vectorStr)
     
     if err == nil {
         calculator := cvss.NewCalculator(vector)
@@ -495,8 +487,7 @@ func parseWithFallback(vectorStr string) FallbackResult {
     // 尝试带修正的回退解析
     correctedVector := attemptVectorCorrection(vectorStr)
     if correctedVector != vectorStr {
-        parser := parser.NewCvss3xParser(correctedVector)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(correctedVector)
         
         if err == nil {
             calculator := cvss.NewCalculator(vector)
@@ -582,8 +573,7 @@ func testVersionCompatibility() {
         fmt.Printf("测试 %d: %s\n", i+1, test.description)
         fmt.Printf("向量: %s\n", test.vector)
         
-        parser := parser.NewCvss3xParser(test.vector)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(test.vector)
         
         if test.expectError {
             if err != nil {
@@ -619,8 +609,7 @@ func performStressTest() {
     errorCount := 0
     
     for i := 0; i < iterations; i++ {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         
         if err != nil {
             errorCount++
@@ -677,8 +666,7 @@ func safeVectorProcessing(vectorStr string) (float64, error) {
     }, 1)
     
     go func() {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         
         if err != nil {
             resultChan <- struct {
