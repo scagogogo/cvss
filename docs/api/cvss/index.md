@@ -37,8 +37,8 @@ cvssVector.MajorVersion = 3
 cvssVector.MinorVersion = 1
 
 // Set base metrics
-cvssVector.Cvss3xBase.AttackVector = &vector.AttackVectorNetwork{}
-cvssVector.Cvss3xBase.AttackComplexity = &vector.AttackComplexityLow{}
+cvssVector.Cvss3xBase.AttackVector = vector.AttackVectorNetwork
+cvssVector.Cvss3xBase.AttackComplexity = vector.AttackComplexityLow
 // ... set other metrics
 ```
 

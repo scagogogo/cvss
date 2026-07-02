@@ -37,8 +37,8 @@ cvssVector.MajorVersion = 3
 cvssVector.MinorVersion = 1
 
 // 设置基础指标
-cvssVector.Cvss3xBase.AttackVector = &vector.AttackVectorNetwork{}
-cvssVector.Cvss3xBase.AttackComplexity = &vector.AttackComplexityLow{}
+cvssVector.Cvss3xBase.AttackVector = vector.AttackVectorNetwork
+cvssVector.Cvss3xBase.AttackComplexity = vector.AttackComplexityLow
 // ... 设置其他指标
 ```
 

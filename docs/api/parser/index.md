@@ -161,8 +161,8 @@ _, err = p.Parse()
 ### 3. 语义分析
 ```go
 // 创建向量对象
-"AV:N" → &vector.AttackVectorNetwork{}
-"AC:L" → &vector.AttackComplexityLow{}
+"AV:N" → vector.AttackVectorNetwork
+"AC:L" → vector.AttackComplexityLow
 ```
 
 ## 性能特性
