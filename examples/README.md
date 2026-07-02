@@ -11,10 +11,11 @@
 - **[03_json](./03_json)** - 如何将CVSS向量转换为JSON格式
 - **[04_temporal](./04_temporal)** - 使用时间指标及其对评分影响的示例
 - **[05_environmental](./05_environmental)** - 使用环境指标及其对评分影响的示例
-- **[06_distance](./06_distance)** - 计算和比较CVSS向量之间距离的示例（使用旧目录中的内容）
+- **[06_distance](./distance)** - 计算和比较CVSS向量之间距离的示例
 - **[07_vector_comparison](./07_vector_comparison)** - 更复杂的向量比较功能展示
 - **[08_severity_levels](./08_severity_levels)** - 处理CVSS严重性等级的示例
 - **[09_edge_cases](./09_edge_cases)** - 处理各种边缘情况的示例
+- **[10_builder](./10_builder)** - 使用 Builder API 流式构建 CVSS 向量的示例
 
 ## 运行示例
 
@@ -52,6 +53,9 @@ go run main.go
 
 ### 09_edge_cases - 边缘情况处理
 展示如何处理各种边缘情况，如不完整向量、无效向量和极端评分。
+
+### 10_builder - Builder API
+演示使用 Builder API 流式构建 CVSS 向量，短方法名与 CVSS 指标缩写一一对应。
 
 ## 最佳实践
 
