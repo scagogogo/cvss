@@ -51,7 +51,7 @@ sequenceDiagram
 | 🤖       | **Skills** (Claude Code)   | Interactive analysis, natural language      | `claude mcp add --scope user cvss-skills -- https://github.com/scagogogo/cvss-skills` |
 | 📦       | **Go SDK**                 | Building security tools & automation in Go | `go get github.com/scagogogo/cvss-skills@latest`                            |
 | 💻       | **CLI**                    | Scripting, batch processing, quick lookups  | See [Downloads](/downloads/)                                               |
-| 🔌       | **MCP**                    | AI agent integration via Model Context      | Add this repo as an MCP server from any MCP-compatible client               |
+| 🔌       | **MCP**                    | AI agent integration via Model Context Protocol | Add this repo as an MCP server from any MCP-compatible client               |
 
 ::: details When each surface fits — and when it doesn't
 | Surface     | Reach for it when…                                              | Look elsewhere when…                                             |
