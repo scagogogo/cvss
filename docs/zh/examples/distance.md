@@ -53,10 +53,9 @@ func main() {
     fmt.Printf("\n距离指标:\n")
     fmt.Printf("  欧几里得距离: %.3f\n", calc.EuclideanDistance())
     fmt.Printf("  曼哈顿距离: %.3f\n", calc.ManhattanDistance())
-    fmt.Printf("  切比雪夫距离: %.3f\n", calc.ChebyshevDistance())
+    fmt.Printf("  分数差异: %.3f\n", calc.ScoreDifference())
     fmt.Printf("\n相似性指标:\n")
-    fmt.Printf("  余弦相似度: %.3f\n", calc.CosineSimilarity())
-    fmt.Printf("  雅卡德相似度: %.3f\n", calc.JaccardSimilarity())
+    fmt.Printf("  杰卡德相似度: %.3f\n", calc.JaccardSimilarity())
 }
 ```
 
@@ -75,7 +74,7 @@ func interpretDistance(distance float64, algorithm string) string {
         } else {
             return "非常不同"
         }
-    case "cosine":
+    case "jaccard":
         if distance > 0.9 {
             return "非常相似"
         } else if distance > 0.7 {
@@ -94,13 +93,13 @@ func analyzeVectorSimilarity(v1, v2 *cvss.Cvss3x) {
     calc := cvss.NewDistanceCalculator(v1, v2)
     
     euclidean := calc.EuclideanDistance()
-    cosine := calc.CosineSimilarity()
+    jaccard := calc.JaccardSimilarity()
     
     fmt.Printf("相似性分析:\n")
     fmt.Printf("  向量 1: %s\n", v1.String())
     fmt.Printf("  向量 2: %s\n", v2.String())
     fmt.Printf("  欧几里得: %.3f (%s)\n", euclidean, interpretDistance(euclidean, "euclidean"))
-    fmt.Printf("  余弦: %.3f (%s)\n", cosine, interpretDistance(cosine, "cosine"))
+    fmt.Printf("  杰卡德: %.3f (%s)\n", jaccard, interpretDistance(jaccard, "jaccard"))
 }
 ```
 
@@ -118,8 +117,7 @@ func demonstrateEuclideanDistance() {
 
     parsedVectors := make([]*cvss.Cvss3x, len(vectors))
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             log.Fatal(err)
         }
@@ -187,11 +185,11 @@ func interpretManhattanDistance(distance float64) string {
 }
 ```
 
-### 余弦相似度
+### 杰卡德相似度
 
 ```go
-func demonstrateCosineSimilarity() {
-    // 余弦相似度对于理解方向相似性很有用，不考虑大小
+func demonstrateJaccardSimilarity() {
+    // 杰卡德相似度衡量两个向量之间指标匹配的比例
     
     vectors := []string{
         "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
@@ -201,24 +199,23 @@ func demonstrateCosineSimilarity() {
 
     parsedVectors := make([]*cvss.Cvss3x, len(vectors))
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         parsedVectors[i] = vector
     }
 
-    fmt.Println("余弦相似度分析:")
+    fmt.Println("杰卡德相似度分析:")
     for i := 0; i < len(parsedVectors); i++ {
         for j := i + 1; j < len(parsedVectors); j++ {
             calc := cvss.NewDistanceCalculator(parsedVectors[i], parsedVectors[j])
-            similarity := calc.CosineSimilarity()
+            similarity := calc.JaccardSimilarity()
             
             fmt.Printf("V%d vs V%d: %.3f (%s)\n", 
-                i+1, j+1, similarity, interpretCosineSimilarity(similarity))
+                i+1, j+1, similarity, interpretJaccardSimilarity(similarity))
         }
     }
 }
 
-func interpretCosineSimilarity(similarity float64) string {
+func interpretJaccardSimilarity(similarity float64) string {
     if similarity > 0.95 {
         return "几乎相同的模式"
     } else if similarity > 0.8 {
@@ -282,8 +279,7 @@ func demonstrateClustering() {
 
     parsedVectors := make([]*cvss.Cvss3x, len(vectors))
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         parsedVectors[i] = vector
     }
 
@@ -311,7 +307,7 @@ func findSimilarVectors(target *cvss.Cvss3x, candidates []*cvss.Cvss3x, threshol
     for i, candidate := range candidates {
         calc := cvss.NewDistanceCalculator(target, candidate)
         distance := calc.EuclideanDistance()
-        similarity := calc.CosineSimilarity()
+        similarity := calc.JaccardSimilarity()
 
         if distance <= threshold {
             similar = append(similar, SimilarVector{
@@ -353,7 +349,7 @@ func findNearestNeighbors(target *cvss.Cvss3x, candidates []*cvss.Cvss3x, k int)
     for i, candidate := range candidates {
         calc := cvss.NewDistanceCalculator(target, candidate)
         distance := calc.EuclideanDistance()
-        similarity := calc.CosineSimilarity()
+        similarity := calc.JaccardSimilarity()
 
         neighbors = append(neighbors, SimilarVector{
             Index:      i,
@@ -452,8 +448,7 @@ func demonstrateAnomalyDetection() {
 
     parsedVectors := make([]*cvss.Cvss3x, len(vectors))
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         parsedVectors[i] = vector
     }
 
@@ -516,8 +511,8 @@ func (b *BatchDistanceCalculator) GetDistance(i, j int, algorithm string) float6
         distance = calc.EuclideanDistance()
     case "manhattan":
         distance = calc.ManhattanDistance()
-    case "cosine":
-        distance = calc.CosineSimilarity()
+    case "jaccard":
+        distance = calc.JaccardSimilarity()
     default:
         distance = calc.EuclideanDistance()
     }

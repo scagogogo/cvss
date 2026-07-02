@@ -53,9 +53,8 @@ func main() {
     fmt.Printf("\nDistance Metrics:\n")
     fmt.Printf("  Euclidean Distance: %.3f\n", calc.EuclideanDistance())
     fmt.Printf("  Manhattan Distance: %.3f\n", calc.ManhattanDistance())
-    fmt.Printf("  Chebyshev Distance: %.3f\n", calc.ChebyshevDistance())
+    fmt.Printf("  Score Difference: %.3f\n", calc.ScoreDifference())
     fmt.Printf("\nSimilarity Metrics:\n")
-    fmt.Printf("  Cosine Similarity: %.3f\n", calc.CosineSimilarity())
     fmt.Printf("  Jaccard Similarity: %.3f\n", calc.JaccardSimilarity())
 }
 ```
@@ -75,7 +74,7 @@ func interpretDistance(distance float64, algorithm string) string {
         } else {
             return "Very Different"
         }
-    case "cosine":
+    case "jaccard":
         if distance > 0.9 {
             return "Very Similar"
         } else if distance > 0.7 {
@@ -94,13 +93,13 @@ func analyzeVectorSimilarity(v1, v2 *cvss.Cvss3x) {
     calc := cvss.NewDistanceCalculator(v1, v2)
     
     euclidean := calc.EuclideanDistance()
-    cosine := calc.CosineSimilarity()
+    jaccard := calc.JaccardSimilarity()
     
     fmt.Printf("Similarity Analysis:\n")
     fmt.Printf("  Vector 1: %s\n", v1.String())
     fmt.Printf("  Vector 2: %s\n", v2.String())
     fmt.Printf("  Euclidean: %.3f (%s)\n", euclidean, interpretDistance(euclidean, "euclidean"))
-    fmt.Printf("  Cosine: %.3f (%s)\n", cosine, interpretDistance(cosine, "cosine"))
+    fmt.Printf("  Jaccard: %.3f (%s)\n", jaccard, interpretDistance(jaccard, "jaccard"))
 }
 ```
 
@@ -118,8 +117,7 @@ func demonstrateEuclideanDistance() {
 
     parsedVectors := make([]*cvss.Cvss3x, len(vectors))
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             log.Fatal(err)
         }
@@ -188,12 +186,12 @@ func interpretManhattanDistance(distance float64) string {
 }
 ```
 
-### Cosine Similarity
+### Jaccard Similarity
 
 ```go
-func demonstrateCosineSimilarity() {
-    // Cosine similarity is useful for understanding
-    // directional similarity regardless of magnitude
+func demonstrateJaccardSimilarity() {
+    // Jaccard similarity measures the proportion of metrics
+    // that match between two vectors
     
     vectors := []string{
         "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
@@ -203,24 +201,23 @@ func demonstrateCosineSimilarity() {
 
     parsedVectors := make([]*cvss.Cvss3x, len(vectors))
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         parsedVectors[i] = vector
     }
 
-    fmt.Println("Cosine Similarity Analysis:")
+    fmt.Println("Jaccard Similarity Analysis:")
     for i := 0; i < len(parsedVectors); i++ {
         for j := i + 1; j < len(parsedVectors); j++ {
             calc := cvss.NewDistanceCalculator(parsedVectors[i], parsedVectors[j])
-            similarity := calc.CosineSimilarity()
+            similarity := calc.JaccardSimilarity()
             
             fmt.Printf("V%d vs V%d: %.3f (%s)\n", 
-                i+1, j+1, similarity, interpretCosineSimilarity(similarity))
+                i+1, j+1, similarity, interpretJaccardSimilarity(similarity))
         }
     }
 }
 
-func interpretCosineSimilarity(similarity float64) string {
+func interpretJaccardSimilarity(similarity float64) string {
     if similarity > 0.95 {
         return "Nearly identical patterns"
     } else if similarity > 0.8 {
@@ -284,8 +281,7 @@ func demonstrateClustering() {
 
     parsedVectors := make([]*cvss.Cvss3x, len(vectors))
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         parsedVectors[i] = vector
     }
 
@@ -393,7 +389,7 @@ func findSimilarVectors(target *cvss.Cvss3x, candidates []*cvss.Cvss3x, threshol
     for i, candidate := range candidates {
         calc := cvss.NewDistanceCalculator(target, candidate)
         distance := calc.EuclideanDistance()
-        similarity := calc.CosineSimilarity()
+        similarity := calc.JaccardSimilarity()
 
         if distance <= threshold {
             similar = append(similar, SimilarVector{
@@ -435,7 +431,7 @@ func findNearestNeighbors(target *cvss.Cvss3x, candidates []*cvss.Cvss3x, k int)
     for i, candidate := range candidates {
         calc := cvss.NewDistanceCalculator(target, candidate)
         distance := calc.EuclideanDistance()
-        similarity := calc.CosineSimilarity()
+        similarity := calc.JaccardSimilarity()
 
         neighbors = append(neighbors, SimilarVector{
             Index:      i,
@@ -534,8 +530,7 @@ func demonstrateAnomalyDetection() {
 
     parsedVectors := make([]*cvss.Cvss3x, len(vectors))
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         parsedVectors[i] = vector
     }
 
@@ -598,8 +593,8 @@ func (b *BatchDistanceCalculator) GetDistance(i, j int, algorithm string) float6
         distance = calc.EuclideanDistance()
     case "manhattan":
         distance = calc.ManhattanDistance()
-    case "cosine":
-        distance = calc.CosineSimilarity()
+    case "jaccard":
+        distance = calc.JaccardSimilarity()
     default:
         distance = calc.EuclideanDistance()
     }
