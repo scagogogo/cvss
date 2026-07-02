@@ -214,8 +214,7 @@ func processMultipleVectors() {
     for i, vectorStr := range vectors {
         fmt.Printf("\n--- Processing Vector %d ---\n", i+1)
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             fmt.Printf("Error: %v\n", err)
             continue
@@ -246,16 +245,15 @@ func safeParseAndCalculate(vectorStr string) {
     }
 
     // Parse with error handling
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, err := parser.Parse()
+    vector, err := parser.ParseString(vectorStr)
     if err != nil {
         fmt.Printf("Parse error: %v\n", err)
         return
     }
 
-    // Validate parsed vector
-    if !vector.IsValid() {
-        fmt.Println("Error: Parsed vector is invalid")
+    // Validate parsed vector (Check returns the first missing/invalid metric)
+    if err := vector.Check(); err != nil {
+        fmt.Printf("Invalid vector: %v\n", err)
         return
     }
 
@@ -318,7 +316,7 @@ Ensure your CVSS vector strings follow the correct format:
 
 Always check for errors after parsing:
 ```go
-vector, err := parser.Parse()
+vector, err := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
 if err != nil {
     // Handle error
     return

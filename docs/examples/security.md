@@ -206,8 +206,7 @@ func (svp *SecureVectorProcessor) ProcessVector(ctx context.Context, vector stri
     sanitizedVector := svp.validator.SanitizeVector(vector)
     
     // Process vector
-    parser := parser.NewCvss3xParser(sanitizedVector)
-    parsedVector, err := parser.Parse()
+    parsedVector, err := parser.ParseString(sanitizedVector)
     if err != nil {
         svp.auditor.LogSecurityEvent(ctx, "PARSE_ERROR", clientID, sanitizedVector)
         return nil, fmt.Errorf("parsing failed: %w", err)
@@ -525,8 +524,7 @@ type VulnerabilityDB struct {
 
 func (vs *SecurityScanner) ScanVector(vector string) (*SecurityScanResult, error) {
     // Parse vector to extract components
-    parser := parser.NewCvss3xParser(vector)
-    parsedVector, err := parser.Parse()
+    parsedVector, err := parser.ParseString(vector)
     if err != nil {
         return nil, err
     }

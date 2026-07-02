@@ -483,35 +483,36 @@ func (s *CVSSService) ProcessVectorWithTracing(ctx context.Context, vectorStr st
     
     // Parse vector
     ctx, parseSpan := tracer.Start(ctx, "parse_vector")
-    vector, err := s.parser.Parse(vectorStr)
+    vector, err := parser.ParseString(vectorStr)
     parseSpan.End()
-    
+
     if err != nil {
         span.RecordError(err)
         span.SetStatus(codes.Error, "Failed to parse vector")
         return nil, err
     }
-    
-    // Calculate score
+
+    // Calculate score (Calculator binds the vector at construction)
     ctx, calcSpan := tracer.Start(ctx, "calculate_score")
-    score, err := s.calculator.Calculate(vector)
+    calculator := cvss.NewCalculator(vector)
+    score, err := calculator.Calculate()
     calcSpan.End()
-    
+
     if err != nil {
         span.RecordError(err)
         span.SetStatus(codes.Error, "Failed to calculate score")
         return nil, err
     }
-    
+
     span.SetAttributes(
         attribute.Float64("cvss.score", score),
-        attribute.String("cvss.severity", s.calculator.GetSeverityRating(score)),
+        attribute.String("cvss.severity", calculator.GetSeverityRating(score).String()),
     )
-    
+
     return &VectorResult{
         Vector:   vectorStr,
         Score:    score,
-        Severity: s.calculator.GetSeverityRating(score),
+        Severity: calculator.GetSeverityRating(score),
     }, nil
 }
 ```

@@ -20,8 +20,6 @@ Deploying CVSS Skills in production environments requires careful consideration 
 ```go
 // CVSS Service
 type CVSSService struct {
-    parser     parser.Parser
-    calculator calculator.Calculator
     cache      cache.Cache
     metrics    metrics.Collector
     logger     logger.Logger
@@ -29,8 +27,6 @@ type CVSSService struct {
 
 func NewCVSSService(config *Config) *CVSSService {
     return &CVSSService{
-        parser:     parser.NewCvss3xParser(""),
-        calculator: calculator.New(),
         cache:      cache.NewRedisCache(config.Redis),
         metrics:    metrics.NewPrometheus(),
         logger:     logger.NewStructured(config.LogLevel),
@@ -40,31 +36,32 @@ func NewCVSSService(config *Config) *CVSSService {
 func (s *CVSSService) ProcessVector(ctx context.Context, vectorStr string) (*VectorResult, error) {
     span, ctx := opentracing.StartSpanFromContext(ctx, "cvss.process_vector")
     defer span.Finish()
-    
+
     // Check cache first
     if result, found := s.cache.Get(ctx, vectorStr); found {
         s.metrics.IncrementCacheHits()
         return result, nil
     }
-    
-    // Parse and calculate
+
+    // Parse and calculate (parser/calculator are cheap and bind per call)
     start := time.Now()
-    vector, err := s.parser.Parse(vectorStr)
+    vector, err := parser.ParseString(vectorStr)
     if err != nil {
         s.metrics.IncrementErrors("parse_error")
         return nil, fmt.Errorf("failed to parse vector: %w", err)
     }
-    
-    score, err := s.calculator.Calculate(vector)
+
+    calculator := cvss.NewCalculator(vector)
+    score, err := calculator.Calculate()
     if err != nil {
         s.metrics.IncrementErrors("calculation_error")
         return nil, fmt.Errorf("failed to calculate score: %w", err)
     }
-    
+
     result := &VectorResult{
         Vector:   vectorStr,
         Score:    score,
-        Severity: s.calculator.GetSeverityRating(score),
+        Severity: calculator.GetSeverityRating(score),
     }
     
     // Cache result
@@ -182,7 +179,7 @@ func LoadConfig() (*Config, error) {
     
     // Load from file
     if configFile := os.Getenv("CONFIG_FILE"); configFile != "" {
-        data, err := ioutil.ReadFile(configFile)
+        data, err := os.ReadFile(configFile)
         if err != nil {
             return nil, err
         }
@@ -551,17 +548,15 @@ func ErrorHandler() gin.HandlerFunc {
             
             var statusCode int
             var errorCode string
-            
-            switch e := err.Err.(type) {
-            case *ValidationError:
-                statusCode = 400
-                errorCode = "VALIDATION_ERROR"
-            case *ParseError:
+
+            switch {
+            case errors.Is(err.Err, parser.ErrParserMagicHead),
+                errors.Is(err.Err, parser.ErrDuplicateMetric):
                 statusCode = 400
                 errorCode = "PARSE_ERROR"
-            case *CalculationError:
-                statusCode = 422
-                errorCode = "CALCULATION_ERROR"
+            case errors.As(err.Err, &cvss.ValidationErrors{}):
+                statusCode = 400
+                errorCode = "VALIDATION_ERROR"
             default:
                 statusCode = 500
                 errorCode = "INTERNAL_ERROR"
