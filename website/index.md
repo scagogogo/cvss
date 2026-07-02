@@ -33,7 +33,7 @@ features:
     details: Per-metric error reporting, completeness checks, and missing-metric detection — no more guessing what's wrong with a vector.
   - icon: 📊
     title: Compare & Measure
-    details: Diff, merge, and distance metrics (Euclidean, Manhattan, Hamming, Jaccard) with environment-aware variants.
+    details: Diff, merge, and distance metrics (Euclidean, Manhattan, Hamming, Jaccard, score-delta) over base metric values.
   - icon: 💻
     title: 30+ CLI Commands
     details: Scriptable CLI with JSON output for every command. Pre-built binaries for 6 operating systems (33 archive packages).

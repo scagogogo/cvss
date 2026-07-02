@@ -33,7 +33,7 @@ features:
     details: 逐指标错误报告、完整性检查与缺失指标检测 —— 不再猜测向量哪里出错。
   - icon: 📊
     title: 比较与度量
-    details: Diff、合并与距离度量（欧氏、曼哈顿、汉明、Jaccard），含环境感知变体。
+    details: Diff、合并与距离度量（欧氏、曼哈顿、汉明、Jaccard、评分差），基于基础指标取值计算。
   - icon: 💻
     title: 30+ CLI 命令
     details: 可脚本化的 CLI，每条命令均支持 JSON 输出。预编译二进制覆盖 6 个操作系统（共 33 个归档包）。

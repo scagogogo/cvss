@@ -310,7 +310,7 @@ func TestValidationReportsMissingMetrics(t *testing.T) {
 
 1. **Retry with `ParseRelaxed`** when the only failure is a missing `CVSS:` prefix.
 2. **Reject unknown metric values** rather than substituting defaults — silent substitution changes scores.
-3. **Batch resiliently** — collect per-row errors (`CSVRead`, `BatchParse`) so one bad input doesn't abort the run.
+3. **Batch resiliently** — collect per-row errors (`ReadCSVLax`, `BatchParse`) so one bad input doesn't abort the run.
 
 ## Related Documentation
 
