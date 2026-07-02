@@ -4,13 +4,16 @@
 
 ## 结构定义
 
+`Cvss3x` 以嵌入指针的形式持有三个指标组，并携带版本号。字段本身无 json tag —— JSON 序列化由自定义的 `MarshalJSON` 处理（输出向量字符串，详见 [JSON 支持](/zh/api/cvss/json)），而非依赖结构体标签：
+
 ```go
 type Cvss3x struct {
-    MajorVersion         int                   `json:"major_version"`
-    MinorVersion         int                   `json:"minor_version"`
-    Cvss3xBase          *Cvss3xBase           `json:"base_metrics"`
-    Cvss3xTemporal      *Cvss3xTemporal       `json:"temporal_metrics,omitempty"`
-    Cvss3xEnvironmental *Cvss3xEnvironmental  `json:"environmental_metrics,omitempty"`
+    *Cvss3xBase           // 嵌入 —— 基础指标（必需）
+    *Cvss3xTemporal       // 嵌入 —— 时间指标（可选，无则为 nil）
+    *Cvss3xEnvironmental  // 嵌入 —— 环境指标（可选，无则为 nil）
+
+    MajorVersion int      // 始终为 3
+    MinorVersion int      // 0（CVSS 3.0）或 1（CVSS 3.1）
 }
 ```
 
@@ -37,16 +40,18 @@ type Cvss3x struct {
 
 ```go
 type Cvss3xBase struct {
-    AttackVector        Vector `json:"attack_vector"`
-    AttackComplexity    Vector `json:"attack_complexity"`
-    PrivilegesRequired  Vector `json:"privileges_required"`
-    UserInteraction     Vector `json:"user_interaction"`
-    Scope              Vector `json:"scope"`
-    Confidentiality    Vector `json:"confidentiality"`
-    Integrity          Vector `json:"integrity"`
-    Availability       Vector `json:"availability"`
+    AttackVector       vector.Vector
+    AttackComplexity   vector.Vector
+    PrivilegesRequired vector.Vector
+    UserInteraction    vector.Vector
+    Scope              vector.Vector
+    Confidentiality    vector.Vector
+    Integrity          vector.Vector
+    Availability       vector.Vector
 }
 ```
+
+`vector.Vector` 是一个接口。每个指标值都是 `pkg/vector` 中预声明的指针变量（如 `vector.AttackVectorNetwork`、`vector.ConfidentialityHigh`）—— 直接赋值该变量即可，**不要**对其取地址或实例化。
 
 ### 可利用性指标
 
@@ -72,9 +77,9 @@ type Cvss3xBase struct {
 
 ```go
 type Cvss3xTemporal struct {
-    ExploitCodeMaturity Vector `json:"exploit_code_maturity,omitempty"`
-    RemediationLevel    Vector `json:"remediation_level,omitempty"`
-    ReportConfidence    Vector `json:"report_confidence,omitempty"`
+    ExploitCodeMaturity vector.Vector
+    RemediationLevel    vector.Vector
+    ReportConfidence    vector.Vector
 }
 ```
 
@@ -91,19 +96,19 @@ type Cvss3xTemporal struct {
 ```go
 type Cvss3xEnvironmental struct {
     // 环境需求指标
-    ConfidentialityRequirement Vector `json:"confidentiality_requirement,omitempty"`
-    IntegrityRequirement       Vector `json:"integrity_requirement,omitempty"`
-    AvailabilityRequirement    Vector `json:"availability_requirement,omitempty"`
-    
+    ConfidentialityRequirement vector.Vector
+    IntegrityRequirement       vector.Vector
+    AvailabilityRequirement    vector.Vector
+
     // 修改后的基础指标
-    ModifiedAttackVector       Vector `json:"modified_attack_vector,omitempty"`
-    ModifiedAttackComplexity   Vector `json:"modified_attack_complexity,omitempty"`
-    ModifiedPrivilegesRequired Vector `json:"modified_privileges_required,omitempty"`
-    ModifiedUserInteraction    Vector `json:"modified_user_interaction,omitempty"`
-    ModifiedScope             Vector `json:"modified_scope,omitempty"`
-    ModifiedConfidentiality   Vector `json:"modified_confidentiality,omitempty"`
-    ModifiedIntegrity         Vector `json:"modified_integrity,omitempty"`
-    ModifiedAvailability      Vector `json:"modified_availability,omitempty"`
+    ModifiedAttackVector       vector.Vector
+    ModifiedAttackComplexity   vector.Vector
+    ModifiedPrivilegesRequired vector.Vector
+    ModifiedUserInteraction    vector.Vector
+    ModifiedScope              vector.Vector
+    ModifiedConfidentiality    vector.Vector
+    ModifiedIntegrity          vector.Vector
+    ModifiedAvailability       vector.Vector
 }
 ```
 
@@ -131,14 +136,8 @@ func (c *Cvss3x) String() string
 
 **示例：**
 ```go
-vector := &cvss.Cvss3x{
-    MajorVersion: 3,
-    MinorVersion: 1,
-    // ... 设置指标
-}
-
-vectorString := vector.String()
-fmt.Println(vectorString) // "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+cv, _ := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+fmt.Println(cv.String()) // "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
 ```
 
 ### Check
@@ -172,11 +171,14 @@ func (c *Cvss3x) Clone() *Cvss3x
 
 **示例：**
 ```go
-originalVector := &cvss.Cvss3x{...}
-clonedVector := originalVector.Clone()
+original, _ := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+cloned := original.Clone()
 
-// 修改克隆的向量不会影响原始向量
-clonedVector.MajorVersion = 4
+// 修改克隆的向量不会影响原始向量（Clone 是深拷贝）
+cloned.Cvss3xBase.AttackVector = vector.AttackVectorLocal
+fmt.Printf("原始 AV: %c, 克隆 AV: %c\n",
+    original.Cvss3xBase.AttackVector.GetShortValue(),
+    cloned.Cvss3xBase.AttackVector.GetShortValue()) // 原始 AV: N, 克隆 AV: L
 ```
 
 ## 创建和初始化
@@ -184,75 +186,70 @@ clonedVector.MajorVersion = 4
 ### 手动创建
 
 ```go
-// 创建新的 CVSS 向量
-vector := &cvss.Cvss3x{
-    MajorVersion: 3,
-    MinorVersion: 1,
-    Cvss3xBase: &cvss.Cvss3xBase{
-        AttackVector:       &vector.AttackVectorNetwork{},
-        AttackComplexity:   &vector.AttackComplexityLow{},
-        PrivilegesRequired: &vector.PrivilegesRequiredNone{},
-        UserInteraction:    &vector.UserInteractionNone{},
-        Scope:             &vector.ScopeUnchanged{},
-        Confidentiality:   &vector.ConfidentialityHigh{},
-        Integrity:         &vector.IntegrityHigh{},
-        Availability:      &vector.AvailabilityHigh{},
-    },
+cv := cvss.NewCvss3x()
+cv.MajorVersion = 3
+cv.MinorVersion = 1
+
+cv.Cvss3xBase = &cvss.Cvss3xBase{
+    AttackVector:       vector.AttackVectorNetwork,
+    AttackComplexity:   vector.AttackComplexityLow,
+    PrivilegesRequired: vector.PrivilegesRequiredNone,
+    UserInteraction:    vector.UserInteractionNone,
+    Scope:              vector.ScopeUnchanged,
+    Confidentiality:    vector.ConfidentialityHigh,
+    Integrity:          vector.IntegrityHigh,
+    Availability:       vector.AvailabilityHigh,
 }
 ```
 
 ### 使用构建器模式
 
+CVSS Skills 内置流式构建器 `cvss.NewBuilder()`。每个方法接收一个 `rune` 短值（如 `'N'` 表示 AV Network），并立即校验；`Build()` 返回错误，`MustBuild()` 在出错时 panic：
+
 ```go
-vector := cvss.NewCvss3xBuilder().
-    Version(3, 1).
-    AttackVector(vector.AttackVectorNetwork{}).
-    AttackComplexity(vector.AttackComplexityLow{}).
-    PrivilegesRequired(vector.PrivilegesRequiredNone{}).
-    UserInteraction(vector.UserInteractionNone{}).
-    Scope(vector.ScopeUnchanged{}).
-    Confidentiality(vector.ConfidentialityHigh{}).
-    Integrity(vector.IntegrityHigh{}).
-    Availability(vector.AvailabilityHigh{}).
+cv, err := cvss.NewBuilder().Version(3, 1).
+    AV('N').AC('L').PR('N').UI('N').S('U').
+    C('H').I('H').A('H').
     Build()
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(cv.String()) // CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
 ```
 
 ## JSON 序列化
 
+`Cvss3x` 实现了自定义的 `MarshalJSON` / `UnmarshalJSON`：JSON 表示就是**向量字符串本身**（一个 JSON 字符串），而非结构化对象。
+
 ### 序列化
 
 ```go
-vector := &cvss.Cvss3x{...}
+cv, _ := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
 
-// 序列化为 JSON
-jsonData, err := json.MarshalIndent(vector, "", "  ")
+// 序列化为 JSON —— 输出 "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+jsonData, err := json.Marshal(cv)
 if err != nil {
     log.Fatal(err)
 }
-
 fmt.Println(string(jsonData))
 ```
 
 ### 反序列化
 
 ```go
-jsonStr := `{
-  "major_version": 3,
-  "minor_version": 1,
-  "base_metrics": {
-    "attack_vector": {
-      "value": "N",
-      "score": 0.85
-    }
-  }
-}`
+// JSON 内容是一个向量字符串
+jsonStr := []byte(`"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"`)
 
-var vector cvss.Cvss3x
-err := json.Unmarshal([]byte(jsonStr), &vector)
-if err != nil {
+var cv cvss.Cvss3x
+if err := json.Unmarshal(jsonStr, &cv); err != nil {
     log.Fatal(err)
 }
+fmt.Println(cv.String())
 ```
+
+::: tip 需要带评分的结构化 JSON？
+若要同时输出评分、严重性与各指标明细，请使用 `cv.ToJSON(calculator)`（接受一个 `*Calculator`），它返回带 `version`/`vectorString`/`baseScore`/`metrics` 等字段的结构化 JSON。详见 [JSON 支持](/zh/api/cvss/json)。
+:::
 
 ## 使用示例
 
@@ -265,51 +262,49 @@ import (
     "encoding/json"
     "fmt"
     "log"
-    
+
     "github.com/scagogogo/cvss-skills/pkg/cvss"
     "github.com/scagogogo/cvss-skills/pkg/vector"
 )
 
 func main() {
     // 创建 CVSS 向量
-    cvssVector := &cvss.Cvss3x{
-        MajorVersion: 3,
-        MinorVersion: 1,
-        Cvss3xBase: &cvss.Cvss3xBase{
-            AttackVector:       &vector.AttackVectorNetwork{},
-            AttackComplexity:   &vector.AttackComplexityLow{},
-            PrivilegesRequired: &vector.PrivilegesRequiredNone{},
-            UserInteraction:    &vector.UserInteractionNone{},
-            Scope:             &vector.ScopeUnchanged{},
-            Confidentiality:   &vector.ConfidentialityHigh{},
-            Integrity:         &vector.IntegrityHigh{},
-            Availability:      &vector.AvailabilityHigh{},
-        },
+    cvssVector := cvss.NewCvss3x()
+    cvssVector.MajorVersion = 3
+    cvssVector.MinorVersion = 1
+    cvssVector.Cvss3xBase = &cvss.Cvss3xBase{
+        AttackVector:       vector.AttackVectorNetwork,
+        AttackComplexity:   vector.AttackComplexityLow,
+        PrivilegesRequired: vector.PrivilegesRequiredNone,
+        UserInteraction:    vector.UserInteractionNone,
+        Scope:              vector.ScopeUnchanged,
+        Confidentiality:    vector.ConfidentialityHigh,
+        Integrity:          vector.IntegrityHigh,
+        Availability:       vector.AvailabilityHigh,
     }
-    
+
     // 验证向量
     if err := cvssVector.Check(); err != nil {
         log.Fatalf("向量验证失败: %v", err)
     }
-    
+
     // 转换为字符串
-    vectorString := cvssVector.String()
-    fmt.Printf("CVSS 向量: %s\n", vectorString)
-    
-    // 序列化为 JSON
-    jsonData, err := json.MarshalIndent(cvssVector, "", "  ")
+    fmt.Printf("CVSS 向量: %s\n", cvssVector.String())
+
+    // 序列化为 JSON（输出向量字符串）
+    jsonData, err := json.Marshal(cvssVector)
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Printf("JSON 表示:\n%s\n", string(jsonData))
-    
+    fmt.Printf("JSON 表示: %s\n", string(jsonData))
+
     // 计算评分
     calculator := cvss.NewCalculator(cvssVector)
     score, err := calculator.Calculate()
     if err != nil {
         log.Fatal(err)
     }
-    
+
     fmt.Printf("CVSS 评分: %.1f\n", score)
     fmt.Printf("严重性: %s\n", calculator.GetSeverityRating(score))
 }

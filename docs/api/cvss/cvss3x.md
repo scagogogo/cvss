@@ -4,13 +4,16 @@ The `Cvss3x` struct is the core data structure in CVSS Skills, representing a co
 
 ## Type Definition
 
+`Cvss3x` embeds the three metric groups as pointers and carries the version numbers. The fields are unexported-tag-free; JSON serialization is handled by a custom `MarshalJSON` (see [JSON Support](/api/cvss/json)), not by struct tags:
+
 ```go
 type Cvss3x struct {
-    MajorVersion         int                   `json:"majorVersion"`
-    MinorVersion         int                   `json:"minorVersion"`
-    Cvss3xBase          *Cvss3xBase           `json:"base"`
-    Cvss3xTemporal      *Cvss3xTemporal       `json:"temporal,omitempty"`
-    Cvss3xEnvironmental *Cvss3xEnvironmental  `json:"environmental,omitempty"`
+    *Cvss3xBase           // embedded — base metrics (required)
+    *Cvss3xTemporal       // embedded — temporal metrics (optional, nil if absent)
+    *Cvss3xEnvironmental  // embedded — environmental metrics (optional, nil if absent)
+
+    MajorVersion int      // always 3
+    MinorVersion int      // 0 (CVSS 3.0) or 1 (CVSS 3.1)
 }
 ```
 
@@ -19,9 +22,10 @@ type Cvss3x struct {
 ### Version Information
 
 ```go
+// MajorVersion is always 3; MinorVersion is 0 (v3.0) or 1 (v3.1).
 type Cvss3x struct {
-    MajorVersion int `json:"majorVersion"` // CVSS major version (3)
-    MinorVersion int `json:"minorVersion"` // CVSS minor version (0 or 1)
+    MajorVersion int
+    MinorVersion int
     // ...
 }
 ```
@@ -34,16 +38,18 @@ type Cvss3x struct {
 
 ```go
 type Cvss3xBase struct {
-    AttackVector          vector.Vector `json:"attackVector"`
-    AttackComplexity      vector.Vector `json:"attackComplexity"`
-    PrivilegesRequired    vector.Vector `json:"privilegesRequired"`
-    UserInteraction       vector.Vector `json:"userInteraction"`
-    Scope                 vector.Vector `json:"scope"`
-    ConfidentialityImpact vector.Vector `json:"confidentialityImpact"`
-    IntegrityImpact       vector.Vector `json:"integrityImpact"`
-    AvailabilityImpact    vector.Vector `json:"availabilityImpact"`
+    AttackVector       vector.Vector
+    AttackComplexity   vector.Vector
+    PrivilegesRequired vector.Vector
+    UserInteraction    vector.Vector
+    Scope              vector.Vector
+    Confidentiality    vector.Vector
+    Integrity          vector.Vector
+    Availability       vector.Vector
 }
 ```
+
+`vector.Vector` is an interface. Each metric value is a predeclared pointer variable in `pkg/vector` (e.g. `vector.AttackVectorNetwork`, `vector.ConfidentialityHigh`) — assign the variable directly, do **not** take its address or instantiate it.
 
 **Required Metrics:**
 - **Attack Vector (AV)**: Network, Adjacent, Local, Physical
@@ -59,9 +65,9 @@ type Cvss3xBase struct {
 
 ```go
 type Cvss3xTemporal struct {
-    ExploitCodeMaturity vector.Vector `json:"exploitCodeMaturity,omitempty"`
-    RemediationLevel    vector.Vector `json:"remediationLevel,omitempty"`
-    ReportConfidence    vector.Vector `json:"reportConfidence,omitempty"`
+    ExploitCodeMaturity vector.Vector
+    RemediationLevel    vector.Vector
+    ReportConfidence    vector.Vector
 }
 ```
 
@@ -75,19 +81,19 @@ type Cvss3xTemporal struct {
 ```go
 type Cvss3xEnvironmental struct {
     // Environmental Requirements
-    ConfidentialityRequirement vector.Vector `json:"confidentialityRequirement,omitempty"`
-    IntegrityRequirement       vector.Vector `json:"integrityRequirement,omitempty"`
-    AvailabilityRequirement    vector.Vector `json:"availabilityRequirement,omitempty"`
-    
+    ConfidentialityRequirement vector.Vector
+    IntegrityRequirement       vector.Vector
+    AvailabilityRequirement    vector.Vector
+
     // Modified Base Metrics
-    ModifiedAttackVector          vector.Vector `json:"modifiedAttackVector,omitempty"`
-    ModifiedAttackComplexity      vector.Vector `json:"modifiedAttackComplexity,omitempty"`
-    ModifiedPrivilegesRequired    vector.Vector `json:"modifiedPrivilegesRequired,omitempty"`
-    ModifiedUserInteraction       vector.Vector `json:"modifiedUserInteraction,omitempty"`
-    ModifiedScope                 vector.Vector `json:"modifiedScope,omitempty"`
-    ModifiedConfidentialityImpact vector.Vector `json:"modifiedConfidentialityImpact,omitempty"`
-    ModifiedIntegrityImpact       vector.Vector `json:"modifiedIntegrityImpact,omitempty"`
-    ModifiedAvailabilityImpact    vector.Vector `json:"modifiedAvailabilityImpact,omitempty"`
+    ModifiedAttackVector       vector.Vector
+    ModifiedAttackComplexity   vector.Vector
+    ModifiedPrivilegesRequired vector.Vector
+    ModifiedUserInteraction    vector.Vector
+    ModifiedScope              vector.Vector
+    ModifiedConfidentiality    vector.Vector
+    ModifiedIntegrity          vector.Vector
+    ModifiedAvailability       vector.Vector
 }
 ```
 
@@ -96,176 +102,162 @@ type Cvss3xEnvironmental struct {
 ### NewCvss3x
 
 ```go
-func NewCvss3x(majorVersion, minorVersion int) *Cvss3x
+func NewCvss3x() *Cvss3x
 ```
 
-Creates a new CVSS 3.x instance with specified version.
-
-**Parameters:**
-- `majorVersion`: Major version number (3)
-- `minorVersion`: Minor version number (0 or 1)
+Creates a new CVSS 3.x instance with an empty base group and `nil` temporal/environmental groups. The version defaults to 3.1; override it with `SetMetricValue` / the Builder, or parse a string that carries the `CVSS:3.0` prefix.
 
 **Returns:**
-- `*Cvss3x`: New CVSS 3.x instance
+- `*Cvss3x`: New CVSS 3.x instance (base group allocated, temporal/environmental nil)
 
 **Example:**
 ```go
-cvss := cvss.NewCvss3x(3, 1) // CVSS 3.1
+cv := cvss.NewCvss3x() // empty vector (base group allocated; version defaults to 0 — set it or use Builder)
 ```
 
-### NewCvss3xBase
-
-```go
-func NewCvss3xBase() *Cvss3xBase
-```
-
-Creates a new base metrics group.
-
-**Example:**
-```go
-base := cvss.NewCvss3xBase()
-base.AttackVector = &vector.AttackVectorNetwork{}
-base.AttackComplexity = &vector.AttackComplexityLow{}
-// ... set other metrics
-```
+::: tip Prefer the Builder or Parser
+Constructing a `Cvss3x` by hand requires assigning every metric field. In practice, use `cvss.NewBuilder().Version(3,1).AV('N')…MustBuild()` or `parser.ParseString("CVSS:3.1/…")` instead.
+:::
 
 ## Main Methods
 
 ### String
 
 ```go
-func (c *Cvss3x) String() string
+func (x *Cvss3x) String() string
 ```
 
-Returns the CVSS vector string representation.
+Returns the canonical CVSS vector string representation.
 
 **Returns:**
 - `string`: CVSS vector string
 
 **Example:**
 ```go
-cvss := cvss.NewCvss3x(3, 1)
-// ... set metrics
-vectorStr := cvss.String()
-fmt.Println(vectorStr) // "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+cv, _ := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+fmt.Println(cv.String()) // "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
 ```
 
-### IsValid
+### IsComplete
 
 ```go
-func (c *Cvss3x) IsValid() bool
+func (x *Cvss3x) IsComplete() bool
 ```
 
-Checks if the CVSS vector is valid (all required metrics are set).
+Checks whether all 8 required base metrics are set. Does not validate values or check version/optional metrics — use `Validate()` for full structural validation.
 
 **Returns:**
-- `bool`: True if valid, false otherwise
+- `bool`: True if every base metric is non-nil
 
 **Example:**
 ```go
-if cvss.IsValid() {
-    fmt.Println("CVSS vector is valid")
+if cv.IsComplete() {
+    fmt.Println("all base metrics are set")
 } else {
-    fmt.Println("CVSS vector is incomplete")
+    fmt.Println("incomplete; missing:", cv.MissingMetrics())
 }
 ```
 
-### GetVersion
+### Version
 
 ```go
-func (c *Cvss3x) GetVersion() string
+func (x *Cvss3x) Version() string
 ```
 
-Returns the version string.
+Returns the version string formatted as `"<major>.<minor>"`.
 
 **Returns:**
-- `string`: Version string (e.g., "3.1")
+- `string`: Version string (e.g., `"3.1"`)
 
 **Example:**
 ```go
-version := cvss.GetVersion()
-fmt.Printf("CVSS Version: %s\n", version) // "3.1"
+fmt.Printf("CVSS Version: %s\n", cv.Version()) // "3.1"
 ```
 
-### HasTemporal
+### HasTemporalMetrics
 
 ```go
-func (c *Cvss3x) HasTemporal() bool
+func (x *Cvss3x) HasTemporalMetrics() bool
 ```
 
-Checks if temporal metrics are present.
+Checks if any temporal metric (`E`, `RL`, `RC`) is set.
 
 **Returns:**
-- `bool`: True if temporal metrics exist
+- `bool`: True if at least one temporal metric is present
 
 **Example:**
 ```go
-if cvss.HasTemporal() {
-    fmt.Println("Vector includes temporal metrics")
+if cv.HasTemporalMetrics() {
+    fmt.Println("vector includes temporal metrics")
 }
 ```
 
-### HasEnvironmental
+### HasEnvironmentalMetrics
 
 ```go
-func (c *Cvss3x) HasEnvironmental() bool
+func (x *Cvss3x) HasEnvironmentalMetrics() bool
 ```
 
-Checks if environmental metrics are present.
+Checks if any environmental metric is set.
 
 **Returns:**
-- `bool`: True if environmental metrics exist
+- `bool`: True if at least one environmental metric is present
 
 **Example:**
 ```go
-if cvss.HasEnvironmental() {
-    fmt.Println("Vector includes environmental metrics")
+if cv.HasEnvironmentalMetrics() {
+    fmt.Println("vector includes environmental metrics")
 }
 ```
 
 ## Usage Examples
 
-### Creating Complete Vector
+### Creating a Complete Vector
 
 ```go
 package main
 
 import (
     "fmt"
-    
+
     "github.com/scagogogo/cvss-skills/pkg/cvss"
     "github.com/scagogogo/cvss-skills/pkg/vector"
 )
 
 func main() {
-    // Create CVSS 3.1 vector
-    cvss := cvss.NewCvss3x(3, 1)
-    
-    // Set base metrics
-    cvss.Cvss3xBase = cvss.NewCvss3xBase()
-    cvss.Cvss3xBase.AttackVector = &vector.AttackVectorNetwork{}
-    cvss.Cvss3xBase.AttackComplexity = &vector.AttackComplexityLow{}
-    cvss.Cvss3xBase.PrivilegesRequired = &vector.PrivilegesRequiredNone{}
-    cvss.Cvss3xBase.UserInteraction = &vector.UserInteractionNone{}
-    cvss.Cvss3xBase.Scope = &vector.ScopeUnchanged{}
-    cvss.Cvss3xBase.ConfidentialityImpact = &vector.ConfidentialityHigh{}
-    cvss.Cvss3xBase.IntegrityImpact = &vector.IntegrityHigh{}
-    cvss.Cvss3xBase.AvailabilityImpact = &vector.AvailabilityHigh{}
-    
+    // Create an empty 3.1 vector (NewCvss3x allocates the base group)
+    cv := cvss.NewCvss3x()
+    cv.MajorVersion = 3
+    cv.MinorVersion = 1
+
+    // Set base metrics — assign the predeclared value variables directly
+    cv.Cvss3xBase.AttackVector = vector.AttackVectorNetwork
+    cv.Cvss3xBase.AttackComplexity = vector.AttackComplexityLow
+    cv.Cvss3xBase.PrivilegesRequired = vector.PrivilegesRequiredNone
+    cv.Cvss3xBase.UserInteraction = vector.UserInteractionNone
+    cv.Cvss3xBase.Scope = vector.ScopeUnchanged
+    cv.Cvss3xBase.Confidentiality = vector.ConfidentialityHigh
+    cv.Cvss3xBase.Integrity = vector.IntegrityHigh
+    cv.Cvss3xBase.Availability = vector.AvailabilityHigh
+
     // Add temporal metrics (optional)
-    cvss.Cvss3xTemporal = &cvss.Cvss3xTemporal{
-        ExploitCodeMaturity: &vector.ExploitCodeMaturityFunctional{},
-        RemediationLevel:    &vector.RemediationLevelOfficialFix{},
-        ReportConfidence:    &vector.ReportConfidenceConfirmed{},
+    cv.Cvss3xTemporal = &cvss.Cvss3xTemporal{
+        ExploitCodeMaturity: vector.ExploitCodeMaturityFunctional,
+        RemediationLevel:    vector.RemediationLevelOfficialFix,
+        ReportConfidence:    vector.ReportConfidenceConfirmed,
     }
-    
-    // Output vector
-    fmt.Printf("CVSS Vector: %s\n", cvss.String())
-    fmt.Printf("Version: %s\n", cvss.GetVersion())
-    fmt.Printf("Valid: %t\n", cvss.IsValid())
-    fmt.Printf("Has Temporal: %t\n", cvss.HasTemporal())
+
+    // Output
+    fmt.Printf("CVSS Vector: %s\n", cv.String())
+    fmt.Printf("Version: %s\n", cv.Version())
+    fmt.Printf("Complete: %t\n", cv.IsComplete())
+    fmt.Printf("Has Temporal: %t\n", cv.HasTemporalMetrics())
 }
 ```
+
+::: tip Prefer the Builder for hand construction
+The fluent `cvss.NewBuilder().Version(3, 1).AV('N').AC('L').PR('N').UI('N').S('U').C('H').I('H').A('H').MustBuild()` is shorter and validates each metric value as it is set.
+:::
 
 ### Vector Validation
 
@@ -311,8 +303,8 @@ func compareVectors(v1, v2 *cvss.Cvss3x) {
     fmt.Printf("  Vector 2: %s\n", v2.String())
     
     // Compare versions
-    if v1.GetVersion() != v2.GetVersion() {
-        fmt.Printf("  Different versions: %s vs %s\n", v1.GetVersion(), v2.GetVersion())
+    if v1.Version() != v2.Version() {
+        fmt.Printf("  Different versions: %s vs %s\n", v1.Version(), v2.Version())
     }
     
     // Compare base metrics
@@ -329,23 +321,25 @@ func compareVectors(v1, v2 *cvss.Cvss3x) {
 ### Vector Modification
 
 ```go
-func modifyVector(cvss *cvss.Cvss3x) *cvss.Cvss3x {
-    // Create a copy
-    modified := *cvss
-    
+func modifyVector(cv *cvss.Cvss3x) *cvss.Cvss3x {
+    // Deep copy — Clone() duplicates the base/temporal/env groups so the
+    // original is not affected. (A plain `modified := *cv` would share the
+    // embedded *Cvss3xBase pointer and mutate the original.)
+    modified := cv.Clone()
+
     // Modify attack vector
-    modified.Cvss3xBase.AttackVector = &vector.AttackVectorLocal{}
-    
+    modified.Cvss3xBase.AttackVector = vector.AttackVectorLocal
+
     // Add temporal metrics if not present
     if modified.Cvss3xTemporal == nil {
         modified.Cvss3xTemporal = &cvss.Cvss3xTemporal{
-            ExploitCodeMaturity: &vector.ExploitCodeMaturityProofOfConcept{},
-            RemediationLevel:    &vector.RemediationLevelWorkaround{},
-            ReportConfidence:    &vector.ReportConfidenceReasonable{},
+            ExploitCodeMaturity: vector.ExploitCodeMaturityProofOfConcept,
+            RemediationLevel:    vector.RemediationLevelWorkaround,
+            ReportConfidence:    vector.ReportConfidenceReasonable,
         }
     }
-    
-    return &modified
+
+    return modified
 }
 ```
 
@@ -389,23 +383,24 @@ if err != nil {
 ### 1. Immutability
 
 ```go
-// Create immutable vectors
+// Construct a fully-populated, immutable vector
 func createImmutableVector() *cvss.Cvss3x {
-    cvss := cvss.NewCvss3x(3, 1)
-    
-    // Set all metrics at once
-    cvss.Cvss3xBase = &cvss.Cvss3xBase{
-        AttackVector:          &vector.AttackVectorNetwork{},
-        AttackComplexity:      &vector.AttackComplexityLow{},
-        PrivilegesRequired:    &vector.PrivilegesRequiredNone{},
-        UserInteraction:       &vector.UserInteractionNone{},
-        Scope:                 &vector.ScopeUnchanged{},
-        ConfidentialityImpact: &vector.ConfidentialityHigh{},
-        IntegrityImpact:       &vector.IntegrityHigh{},
-        AvailabilityImpact:    &vector.AvailabilityHigh{},
+    cv := cvss.NewCvss3x()
+    cv.MajorVersion = 3
+    cv.MinorVersion = 1
+
+    cv.Cvss3xBase = &cvss.Cvss3xBase{
+        AttackVector:     vector.AttackVectorNetwork,
+        AttackComplexity: vector.AttackComplexityLow,
+        PrivilegesRequired: vector.PrivilegesRequiredNone,
+        UserInteraction:  vector.UserInteractionNone,
+        Scope:            vector.ScopeUnchanged,
+        Confidentiality:  vector.ConfidentialityHigh,
+        Integrity:        vector.IntegrityHigh,
+        Availability:     vector.AvailabilityHigh,
     }
-    
-    return cvss
+
+    return cv
 }
 ```
 
@@ -425,37 +420,37 @@ func createValidatedVector() (*cvss.Cvss3x, error) {
 
 ### 3. Builder Pattern
 
+CVSS Skills ships a fluent `Cvss3xBuilder` (`cvss.NewBuilder()`). Each method takes a `rune` short-value (e.g. `'N'` for AV Network) and validates it immediately; `Build()` returns an error, `MustBuild()` panics on error:
+
 ```go
-type Cvss3xBuilder struct {
-    cvss *cvss.Cvss3x
-}
+// pkg/cvss/builder.go
+type Cvss3xBuilder struct { /* unexported */ }
 
-func NewCvss3xBuilder() *Cvss3xBuilder {
-    return &Cvss3xBuilder{
-        cvss: cvss.NewCvss3x(3, 1),
-    }
-}
+func NewBuilder() *Cvss3xBuilder
+func (b *Cvss3xBuilder) Version(major, minor int) *Cvss3xBuilder
+func (b *Cvss3xBuilder) AV(val rune) *Cvss3xBuilder   // Attack Vector
+func (b *Cvss3xBuilder) AC(val rune) *Cvss3xBuilder   // Attack Complexity
+func (b *Cvss3xBuilder) PR(val rune) *Cvss3xBuilder   // Privileges Required
+func (b *Cvss3xBuilder) UI(val rune) *Cvss3xBuilder   // User Interaction
+func (b *Cvss3xBuilder) S(val rune) *Cvss3xBuilder    // Scope
+func (b *Cvss3xBuilder) C(val rune) *Cvss3xBuilder    // Confidentiality
+func (b *Cvss3xBuilder) I(val rune) *Cvss3xBuilder    // Integrity
+func (b *Cvss3xBuilder) A(val rune) *Cvss3xBuilder    // Availability
+// …plus E/RL/RC and modified-metric (MAV/MAC/…) setters
+func (b *Cvss3xBuilder) Build() (*Cvss3x, error)
+func (b *Cvss3xBuilder) MustBuild() *Cvss3x
+```
 
-func (b *Cvss3xBuilder) AttackVector(av vector.Vector) *Cvss3xBuilder {
-    if b.cvss.Cvss3xBase == nil {
-        b.cvss.Cvss3xBase = cvss.NewCvss3xBase()
-    }
-    b.cvss.Cvss3xBase.AttackVector = av
-    return b
-}
-
-func (b *Cvss3xBuilder) Build() (*cvss.Cvss3x, error) {
-    if err := validateCvssVector(b.cvss); err != nil {
-        return nil, err
-    }
-    return b.cvss, nil
-}
-
-// Usage
-cvss, err := NewCvss3xBuilder().
-    AttackVector(&vector.AttackVectorNetwork{}).
-    // ... set other metrics
+**Usage:**
+```go
+cv, err := cvss.NewBuilder().Version(3, 1).
+    AV('N').AC('L').PR('N').UI('N').S('U').
+    C('H').I('H').A('H').
     Build()
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(cv.String()) // CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
 ```
 
 ## Related Documentation
