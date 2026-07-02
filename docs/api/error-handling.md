@@ -13,7 +13,7 @@ flowchart TD
     P -->|dup key| S2["parser.ErrDuplicateMetric<br/>(sentinel, errors.Is)"]
     P -->|bad version / unknown metric<br/>/ illegal value| FE["fmt.Errorf<br/>(plain text)"]
     P -->|ok| CV["*cvss.Cvss3x"]
-    CV --> V["cvss.Validate() / Check()"]
+    CV --> V["Cvss3x.Validate() / Check()"]
     V --> VE["cvss.ValidationErrors<br/>.MissingMetrics()"]
     CV --> C["calculator.Calculate()"]
     C -->|incomplete vector| VE2["returns Check()'s error<br/>(plain fmt.Errorf)"]

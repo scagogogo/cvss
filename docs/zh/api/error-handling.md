@@ -13,7 +13,7 @@ flowchart TD
     P -->|重复键| S2["parser.ErrDuplicateMetric<br/>（哨兵，errors.Is）"]
     P -->|错误的版本 / 未知指标<br/>/ 非法值| FE["fmt.Errorf<br/>（纯文本）"]
     P -->|成功| CV["*cvss.Cvss3x"]
-    CV --> V["cvss.Validate() / Check()"]
+    CV --> V["Cvss3x.Validate() / Check()"]
     V --> VE["cvss.ValidationErrors<br/>.MissingMetrics()"]
     CV --> C["calculator.Calculate()"]
     C -->|不完整向量| VE2["返回 Check() 的错误<br/>（普通 fmt.Errorf）"]
