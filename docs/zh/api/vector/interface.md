@@ -1,10 +1,10 @@
 # Vector 接口
 
-`Vector` 接口是 CVSS Skills 中所有指标的统一抽象，定义了指标的基本行为和属性。
+`Vector` 接口是 CVSS Skills 中所有指标的统一抽象，定义了一个指标取值（例如 Attack Vector = Network）的基本行为和属性。
 
 ## 类型层次
 
-每个具体指标（如 `AttackVectorNetwork`）都实现同一个 `Vector` 接口，因此评分与格式化代码可以统一对待所有指标：
+每个具体的指标取值（例如 `AttackVectorNetwork`，即 Attack Vector 指标的 "Network" 值）都实现同一个 `Vector` 接口，因此评分与格式化代码可以统一处理所有指标：
 
 ```mermaid
 classDiagram
@@ -17,36 +17,194 @@ classDiagram
         +GetLongValue() string
         +GetDescription() string
         +GetScore() float64
+        +IsNotDefined() bool
         +String() string
     }
-    class AttackVectorNetwork
-    class AttackComplexityLow
-    class ScopeChanged
-    class ConfidentialityHigh
-    class ExploitCodeMaturity
-    class ModifiedAttackVector
+    class VectorImpl {
+        +GroupName string
+        +ShortName string
+        +LongName string
+        +ShortValue rune
+        +LongValue string
+        +Description string
+        +Score float64
+    }
+    class AttackVector {
+        +VectorImpl
+    }
 
-    Vector <|.. AttackVectorNetwork : 基础
-    Vector <|.. AttackComplexityLow : 基础
-    Vector <|.. ScopeChanged : 基础
-    Vector <|.. ConfidentialityHigh : 基础
-    Vector <|.. ExploitCodeMaturity : 时间
-    Vector <|.. ModifiedAttackVector : 环境
+    Vector <|.. VectorImpl : implements
+    Vector <|.. AttackVector : via embedded VectorImpl
+    AttackVector o-- VectorImpl : embeds
 ```
+
+具体的指标类型（如 `AttackVector`、`AttackComplexity`、`Scope`）各自嵌入了 `*VectorImpl`，由后者提供全部 `Vector` 接口方法。预定义的包级变量（如 `AttackVectorNetwork`、`AttackVectorLocal`）是这些类型的开箱即用单例。
 
 ## 接口定义
 
 ```go
 type Vector interface {
-    GetGroupName() string    // 获取指标组名称
-    GetShortName() string    // 获取指标短名称
-    GetLongName() string     // 获取指标完整名称
-    GetShortValue() rune     // 获取指标短值
-    GetLongValue() string    // 获取指标完整值
-    GetDescription() string  // 获取指标描述
-    GetScore() float64       // 获取指标分数
-    String() string          // 字符串表示
+    GetGroupName() string    // 指标分组："Base Metrics"、"Temporal Metrics" 或 "Environmental Metrics"
+    GetShortName() string    // 指标短名，如 "AV"
+    GetLongName() string     // 指标全名，如 "Attack Vector"
+    GetShortValue() rune     // 指标短值，如 'N'
+    GetLongValue() string    // 指标全值，如 "Network"
+    GetDescription() string  // 指标描述
+    GetScore() float64       // 指标评分权重
+    IsNotDefined() bool      // 是否为 "Not Defined" (X) 值
+    String() string          // 字符串表示，如 "AV:N"
 }
+```
+
+## VectorImpl
+
+`VectorImpl` 是支撑每个指标取值的具体结构体。它是导出的，因此你可以直接构造一个 `Vector` —— 但实践中应使用[预定义单例](#预定义指标单例)或[工厂函数](#工厂函数)，而非手写指标取值。
+
+```go
+type VectorImpl struct {
+    GroupName   string
+    ShortName   string
+    LongName    string
+    ShortValue  rune
+    LongValue   string
+    Description string
+    Score       float64
+}
+```
+
+它以值接收者实现 `Vector`。`IsNotDefined()` 在 `ShortValue == 'X'` 时返回 `true`，`String()` 返回 `"<ShortName>:<ShortValue>"`。
+
+```go
+v := &vector.VectorImpl{
+    GroupName:   "Base Metrics",
+    ShortName:   "AV",
+    LongName:    "Attack Vector",
+    ShortValue:  'N',
+    LongValue:   "Network",
+    Description: "...",
+    Score:       0.85,
+}
+fmt.Println(v.String())        // AV:N
+fmt.Println(v.IsNotDefined())  // false
+```
+
+## 具体指标类型
+
+每个 CVSS 指标都有专门的结构体类型，嵌入 `*VectorImpl`。库提供以下类型：
+
+| 类型 | 短名 | 指标 | 单例示例 |
+|------|------|------|----------|
+| `AttackVector` | `AV` / `MAV` | 攻击向量 | `AttackVectorNetwork`、`AttackVectorLocal`、`ModifiedAttackVectorNetwork` |
+| `AttackComplexity` | `AC` / `MAC` | 攻击复杂度 | `AttackComplexityLow`、`AttackComplexityHigh` |
+| `PrivilegesRequired` | `PR` / `MPR` | 所需权限 | `PrivilegesRequiredNone`、`PrivilegesRequiredLow` |
+| `UserInteraction` | `UI` / `MUI` | 用户交互 | `UserInteractionNone`、`UserInteractionRequired` |
+| `Scope` | `S` / `MS` | 范围 | `ScopeUnchanged`、`ScopeChanged` |
+| `Confidentiality` | `C` / `MC` | 机密性 | `ConfidentialityHigh`、`ConfidentialityLow` |
+| `Integrity` | `I` / `MI` | 完整性 | `IntegrityHigh`、`IntegrityLow` |
+| `Availability` | `A` / `MA` | 可用性 | `AvailabilityHigh`、`AvailabilityLow` |
+| `ExploitCodeMaturity` | `E` | 利用代码成熟度 | `ExploitCodeMaturityFunctional`、`ExploitCodeMaturityHigh` |
+| `RemediationLevel` | `RL` | 修复级别 | `RemediationLevelOfficialFix`、`RemediationLevelUnavailable` |
+| `ReportConfidence` | `RC` | 报告可信度 | `ReportConfidenceConfirmed`、`ReportConfidenceReasonable` |
+| `ConfidentialityRequirement` | `CR` | 机密性需求 | `ConfidentialityRequirementHigh`、`ConfidentialityRequirementMedium` |
+| `IntegrityRequirement` | `IR` | 完整性需求 | `IntegrityRequirementHigh`、`IntegrityRequirementMedium` |
+| `AvailabilityRequirement` | `AR` | 可用性需求 | `AvailabilityRequirementHigh`、`AvailabilityRequirementMedium` |
+
+每个类型都遵循相同的形状：
+
+```go
+type AttackVector struct {
+    *VectorImpl
+}
+```
+
+::: tip 类型与单例的区别
+`AttackVector` 是**类型**（嵌入了 `*VectorImpl`）。`AttackVectorNetwork` 是 `*AttackVector` 类型的**预定义变量**，持有 "Network" 取值。不要混淆两者：`&vector.AttackVector{}`（零值，空 `VectorImpl`）通常不是你想要的 —— 请使用单例。
+:::
+
+### 预定义指标单例
+
+每个合法的指标取值都有开箱即用的包级变量。它们是引用指标取值的规范方式，也是工厂函数的返回值。
+
+```go
+av := vector.AttackVectorNetwork
+fmt.Printf("%s\n", av.String())        // AV:N
+fmt.Printf("%.2f\n", av.GetScore())    // 0.85
+fmt.Printf("%s\n", av.GetGroupName())  // Base Metrics
+```
+
+修改后（环境）取值和 "Not Defined"（`X`）变体也作为单例暴露，例如 `ModifiedAttackVectorNetwork`、`AttackVectorNotDefined`：
+
+```go
+nd := vector.AttackVectorNotDefined
+fmt.Printf("%v\n", nd.IsNotDefined())  // true
+fmt.Printf("%.2f\n", nd.GetScore())    // 1.0
+```
+
+## 工厂函数
+
+与其按名称引用单例，不如使用工厂函数从短名和取值解析指标。它们返回 `(Vector, error)` —— 当短名未知或取值非法时返回非 nil 错误。
+
+### GetVectorByShortName
+
+```go
+func GetVectorByShortName(shortName string, value string) (Vector, error)
+```
+
+根据短名和单字符取值解析任意指标。`value` 必须恰好是一个字符。
+
+**参数:**
+- `shortName`: 指标短名，如 `"AV"`、`"MAV"`、`"E"`、`"CR"`
+- `value`: 作为 1 字符字符串的指标短值，如 `"N"`、`"X"`
+
+**返回值:**
+- `(Vector, error)`: 指标取值；若短名/取值未知或 `value` 不是单字符则返回错误。
+
+**示例:**
+```go
+v, err := vector.GetVectorByShortName("AV", "N")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(v.String())  // AV:N
+```
+
+### 每指标工厂
+
+每个指标都有自己的工厂函数，接收 `rune` 类型的短值：
+
+| 函数 | 签名 |
+|------|------|
+| `GetAttackVector` | `(shortValue rune) (Vector, error)` |
+| `GetAttackComplexity` | `(shortValue rune) (Vector, error)` |
+| `GetPrivilegesRequired` | `(shortValue rune) (Vector, error)` |
+| `GetUserInteraction` | `(shortValue rune) (Vector, error)` |
+| `GetScope` | `(shortValue rune) (Vector, error)` |
+| `GetConfidentiality` | `(shortValue rune) (Vector, error)` |
+| `GetIntegrity` | `(shortValue rune) (Vector, error)` |
+| `GetAvailability` | `(shortValue rune) (Vector, error)` |
+| `GetExploitCodeMaturity` | `(shortValue rune) (Vector, error)` |
+| `GetRemediationLevel` | `(shortValue rune) (Vector, error)` |
+| `GetReportConfidence` | `(shortValue rune) (Vector, error)` |
+| `GetConfidentialityRequirement` | `(shortValue rune) (Vector, error)` |
+| `GetIntegrityRequirement` | `(shortValue rune) (Vector, error)` |
+| `GetAvailabilityRequirement` | `(shortValue rune) (Vector, error)` |
+| `GetModifiedAttackVector` | `(shortValue rune) (Vector, error)` |
+| `GetModifiedAttackComplexity` | `(shortValue rune) (Vector, error)` |
+| `GetModifiedPrivilegesRequired` | `(shortValue rune) (Vector, error)` |
+| `GetModifiedUserInteraction` | `(shortValue rune) (Vector, error)` |
+| `GetModifiedScope` | `(shortValue rune) (Vector, error)` |
+| `GetModifiedConfidentiality` | `(shortValue rune) (Vector, error)` |
+| `GetModifiedIntegrity` | `(shortValue rune) (Vector, error)` |
+| `GetModifiedAvailability` | `(shortValue rune) (Vector, error)` |
+
+```go
+e, err := vector.GetExploitCodeMaturity('F')
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("%s\n", e.String())        // E:F
+fmt.Printf("%s\n", e.GetGroupName())  // Temporal Metrics
+fmt.Printf("%.2f\n", e.GetScore())    // 0.97
 ```
 
 ## 方法详情
@@ -57,21 +215,15 @@ type Vector interface {
 GetGroupName() string
 ```
 
-返回指标所属的组名称。
+返回指标所属的分组。
 
 **返回值:**
-- `string`: 指标组名称
-
-**可能的值:**
-- `"Base"` - 基础指标组
-- `"Temporal"` - 时间指标组
-- `"Environmental"` - 环境指标组
+- `string`: `"Base Metrics"`、`"Temporal Metrics"`、`"Environmental Metrics"` 之一
 
 **示例:**
 ```go
-av := &vector.AttackVectorNetwork{}
-groupName := av.GetGroupName()
-fmt.Printf("组: %s\n", groupName) // "Base"
+av := vector.AttackVectorNetwork
+fmt.Printf("Group: %s\n", av.GetGroupName()) // Base Metrics
 ```
 
 ### GetShortName
@@ -80,16 +232,15 @@ fmt.Printf("组: %s\n", groupName) // "Base"
 GetShortName() string
 ```
 
-返回指标的短名称（通常是缩写）。
+返回指标的短名（缩写）。
 
 **返回值:**
-- `string`: 指标短名称
+- `string`: 如 `"AV"`、`"E"`、`"MAV"`
 
 **示例:**
 ```go
-av := &vector.AttackVectorNetwork{}
-shortName := av.GetShortName()
-fmt.Printf("短名称: %s\n", shortName) // "AV"
+av := vector.AttackVectorNetwork
+fmt.Printf("Short name: %s\n", av.GetShortName()) // AV
 ```
 
 ### GetLongName
@@ -98,16 +249,15 @@ fmt.Printf("短名称: %s\n", shortName) // "AV"
 GetLongName() string
 ```
 
-返回指标的完整名称。
+返回指标的全名。
 
 **返回值:**
-- `string`: 指标完整名称
+- `string`: 如 `"Attack Vector"`、`"Exploit Code Maturity"`
 
 **示例:**
 ```go
-av := &vector.AttackVectorNetwork{}
-longName := av.GetLongName()
-fmt.Printf("完整名称: %s\n", longName) // "Attack Vector"
+av := vector.AttackVectorNetwork
+fmt.Printf("Long name: %s\n", av.GetLongName()) // Attack Vector
 ```
 
 ### GetShortValue
@@ -116,16 +266,15 @@ fmt.Printf("完整名称: %s\n", longName) // "Attack Vector"
 GetShortValue() rune
 ```
 
-返回指标值的短表示（单个字符）。
+返回指标的短值（单个字符）。
 
 **返回值:**
-- `rune`: 指标短值
+- `rune`: 如 `'N'`、`'F'`、`'X'`
 
 **示例:**
 ```go
-av := &vector.AttackVectorNetwork{}
-shortValue := av.GetShortValue()
-fmt.Printf("短值: %c\n", shortValue) // 'N'
+av := vector.AttackVectorNetwork
+fmt.Printf("Short value: %c\n", av.GetShortValue()) // N
 ```
 
 ### GetLongValue
@@ -134,16 +283,15 @@ fmt.Printf("短值: %c\n", shortValue) // 'N'
 GetLongValue() string
 ```
 
-返回指标值的完整描述。
+返回指标的全值描述。
 
 **返回值:**
-- `string`: 指标完整值
+- `string`: 如 `"Network"`、`"Functional"`、`"Not Defined"`
 
 **示例:**
 ```go
-av := &vector.AttackVectorNetwork{}
-longValue := av.GetLongValue()
-fmt.Printf("完整值: %s\n", longValue) // "Network"
+av := vector.AttackVectorNetwork
+fmt.Printf("Long value: %s\n", av.GetLongValue()) // Network
 ```
 
 ### GetDescription
@@ -152,17 +300,16 @@ fmt.Printf("完整值: %s\n", longValue) // "Network"
 GetDescription() string
 ```
 
-返回指标的详细描述。
+返回指标取值的详细描述，依据 CVSS 规范。
 
 **返回值:**
 - `string`: 指标描述
 
 **示例:**
 ```go
-av := &vector.AttackVectorNetwork{}
-description := av.GetDescription()
-fmt.Printf("描述: %s\n", description)
-// "攻击者可以通过网络远程访问漏洞组件"
+av := vector.AttackVectorNetwork
+fmt.Printf("Description: %s\n", av.GetDescription())
+// "The vulnerable component is bound to the network stack..."
 ```
 
 ### GetScore
@@ -171,16 +318,39 @@ fmt.Printf("描述: %s\n", description)
 GetScore() float64
 ```
 
-返回指标在 CVSS 计算中的数值分数。
+返回指标取值在 CVSS 计算中使用的数值评分权重。对于 "Not Defined"（`X`）取值，评分为 `1.0`（乘法意义上的无操作）。
 
 **返回值:**
-- `float64`: 指标分数
+- `float64`: 指标评分权重（通常在 0.0 到 1.0 之间）
 
 **示例:**
 ```go
-av := &vector.AttackVectorNetwork{}
-score := av.GetScore()
-fmt.Printf("分数: %.2f\n", score) // 0.85
+av := vector.AttackVectorNetwork
+fmt.Printf("Score: %.2f\n", av.GetScore()) // 0.85
+```
+
+::: warning 所需权限的评分依赖范围
+`PrivilegesRequired.GetScore()` 返回 **Scope-Unchanged** 权重。PR 的真实 CVSS 评分取决于 Scope 是否为 Changed。请使用 [`GetPrivilegesRequiredScore`](#getprivilegesrequiredscore) 获取给定范围下的正确权重。
+:::
+
+### IsNotDefined
+
+```go
+IsNotDefined() bool
+```
+
+返回此指标取值是否为 "Not Defined"（`X`）。"Not Defined" 表示该指标不应修改基础指标值，其评分为 `1.0`。
+
+**返回值:**
+- `bool`: `ShortValue == 'X'` 时为 `true`
+
+**示例:**
+```go
+nd := vector.AttackVectorNotDefined
+fmt.Printf("Is not defined: %v\n", nd.IsNotDefined()) // true
+
+av := vector.AttackVectorNetwork
+fmt.Printf("Is not defined: %v\n", av.IsNotDefined()) // false
 ```
 
 ### String
@@ -189,285 +359,241 @@ fmt.Printf("分数: %.2f\n", score) // 0.85
 String() string
 ```
 
-返回指标的字符串表示，通常是短名称和短值的组合。
+返回指标的 CVSS 向量格式字符串表示（`<ShortName>:<ShortValue>`）。
 
 **返回值:**
-- `string`: 字符串表示
+- `string`: 如 `"AV:N"`、`"E:F"`
 
 **示例:**
 ```go
-av := &vector.AttackVectorNetwork{}
-str := av.String()
-fmt.Printf("字符串: %s\n", str) // "AV:N"
+av := vector.AttackVectorNetwork
+fmt.Printf("String: %s\n", av.String()) // AV:N
 ```
 
-## 指标分类
+## 评分辅助函数
 
-### 基础指标 (Base Metrics)
+少数指标的评分权重依赖上下文（其他指标或 CVSS 次版本号）。包为这些指标提供了专用辅助函数 —— 不要仅依赖 `GetScore()`。
 
-基础指标描述漏洞的固有特征，不随时间或环境变化。
-
-#### 攻击向量 (Attack Vector - AV)
-- **Network (N)**: 网络攻击 - 分数: 0.85
-- **Adjacent (A)**: 相邻网络攻击 - 分数: 0.62
-- **Local (L)**: 本地攻击 - 分数: 0.55
-- **Physical (P)**: 物理攻击 - 分数: 0.20
-
-#### 攻击复杂度 (Attack Complexity - AC)
-- **Low (L)**: 低复杂度 - 分数: 0.77
-- **High (H)**: 高复杂度 - 分数: 0.44
-
-#### 所需权限 (Privileges Required - PR)
-- **None (N)**: 无需权限 - 分数: 0.85
-- **Low (L)**: 低权限 - 分数: 0.62/0.68 (取决于作用域)
-- **High (H)**: 高权限 - 分数: 0.27/0.50 (取决于作用域)
-
-#### 用户交互 (User Interaction - UI)
-- **None (N)**: 无需交互 - 分数: 0.85
-- **Required (R)**: 需要交互 - 分数: 0.62
-
-#### 作用域 (Scope - S)
-- **Unchanged (U)**: 作用域不变 - 分数: 1.0
-- **Changed (C)**: 作用域改变 - 分数: 1.0
-
-#### 影响指标 (Impact Metrics)
-**机密性影响 (Confidentiality Impact - C)**
-**完整性影响 (Integrity Impact - I)**
-**可用性影响 (Availability Impact - A)**
-- **None (N)**: 无影响 - 分数: 0.0
-- **Low (L)**: 低影响 - 分数: 0.22
-- **High (H)**: 高影响 - 分数: 0.56
-
-### 时间指标 (Temporal Metrics)
-
-时间指标反映随时间变化的漏洞特征。
-
-#### 漏洞利用代码成熟度 (Exploit Code Maturity - E)
-- **Not Defined (X)**: 未定义 - 分数: 1.0
-- **Unproven (U)**: 未证实 - 分数: 0.91
-- **Proof-of-Concept (P)**: 概念验证 - 分数: 0.94
-- **Functional (F)**: 功能性 - 分数: 0.97
-- **High (H)**: 高成熟度 - 分数: 1.0
-
-#### 修复级别 (Remediation Level - RL)
-- **Not Defined (X)**: 未定义 - 分数: 1.0
-- **Official Fix (O)**: 官方修复 - 分数: 0.95
-- **Temporary Fix (T)**: 临时修复 - 分数: 0.96
-- **Workaround (W)**: 变通方法 - 分数: 0.97
-- **Unavailable (U)**: 不可用 - 分数: 1.0
-
-#### 报告可信度 (Report Confidence - RC)
-- **Not Defined (X)**: 未定义 - 分数: 1.0
-- **Unknown (U)**: 未知 - 分数: 0.92
-- **Reasonable (R)**: 合理 - 分数: 0.96
-- **Confirmed (C)**: 已确认 - 分数: 1.0
-
-### 环境指标 (Environmental Metrics)
-
-环境指标允许根据特定环境调整 CVSS 分数。
-
-#### 安全需求 (Security Requirements)
-**机密性需求 (Confidentiality Requirement - CR)**
-**完整性需求 (Integrity Requirement - IR)**
-**可用性需求 (Availability Requirement - AR)**
-- **Not Defined (X)**: 未定义 - 分数: 1.0
-- **Low (L)**: 低需求 - 分数: 0.5
-- **Medium (M)**: 中等需求 - 分数: 1.0
-- **High (H)**: 高需求 - 分数: 1.5
-
-#### 修改的基础指标 (Modified Base Metrics)
-所有基础指标都可以有对应的修改版本，前缀为 "M"：
-- **MAV**: 修改的攻击向量
-- **MAC**: 修改的攻击复杂度
-- **MPR**: 修改的所需权限
-- **MUI**: 修改的用户交互
-- **MS**: 修改的作用域
-- **MC**: 修改的机密性影响
-- **MI**: 修改的完整性影响
-- **MA**: 修改的可用性影响
-
-## 实现示例
-
-### 自定义指标实现
+### GetPrivilegesRequiredScore
 
 ```go
-type CustomMetric struct {
-    groupName   string
-    shortName   string
-    longName    string
-    shortValue  rune
-    longValue   string
-    description string
-    score       float64
-}
-
-func (c *CustomMetric) GetGroupName() string {
-    return c.groupName
-}
-
-func (c *CustomMetric) GetShortName() string {
-    return c.shortName
-}
-
-func (c *CustomMetric) GetLongName() string {
-    return c.longName
-}
-
-func (c *CustomMetric) GetShortValue() rune {
-    return c.shortValue
-}
-
-func (c *CustomMetric) GetLongValue() string {
-    return c.longValue
-}
-
-func (c *CustomMetric) GetDescription() string {
-    return c.description
-}
-
-func (c *CustomMetric) GetScore() float64 {
-    return c.score
-}
-
-func (c *CustomMetric) String() string {
-    return fmt.Sprintf("%s:%c", c.shortName, c.shortValue)
-}
+func GetPrivilegesRequiredScore(pr Vector, scopeChanged bool) float64
 ```
 
-### 指标工厂
+返回给定范围下正确的所需权限权重。PR 是唯一一个权重依赖 Scope 是否为 Changed 的基础指标。
+
+**参数:**
+- `pr`: PR（或 MPR）的 `Vector`
+- `scopeChanged`: Scope（或 Modified Scope）是否为 Changed
+
+**返回值:**
+- `float64`: PR 评分权重。若 `pr` 为 `nil` 或 `Not Defined`（`X`）则返回 `1.0`。
+
+**示例:**
+```go
+pr, _ := vector.GetPrivilegesRequired('L')
+fmt.Printf("%.2f\n", vector.GetPrivilegesRequiredScore(pr, false)) // 0.62
+fmt.Printf("%.2f\n", vector.GetPrivilegesRequiredScore(pr, true))  // 0.68
+```
+
+### GetUserInteractionScore
 
 ```go
-type MetricFactory struct {
-    metrics map[string]map[rune]Vector
+func GetUserInteractionScore(ui Vector, minorVersion int) float64
+```
+
+返回用户交互权重。UI 的评分在 CVSS 3.0 与 3.1 之间略有不同，因此需要次版本号。
+
+**参数:**
+- `ui`: UI（或 MUI）的 `Vector`
+- `minorVersion`: CVSS 次版本号（3.0 为 `0`，3.1 为 `1`）
+
+**返回值:**
+- `float64`: UI 评分权重。若 `ui` 为 `nil` 或 `Not Defined`（`X`）则返回 `1.0`。
+
+**示例:**
+```go
+ui, _ := vector.GetUserInteraction('R')
+fmt.Printf("%.2f\n", vector.GetUserInteractionScore(ui, 1)) // 0.62 (CVSS 3.1)
+```
+
+### IsScopeChanged
+
+```go
+func IsScopeChanged(scope Vector) bool
+```
+
+返回给定 Scope 向量是否为 Changed。若 `scope` 为 `nil` 或其取值不为 `'C'`，返回 `false`。
+
+**示例:**
+```go
+scope, _ := vector.GetScope('C')
+fmt.Printf("%v\n", vector.IsScopeChanged(scope)) // true
+```
+
+### IsModifiedScopeChanged
+
+```go
+func IsModifiedScopeChanged(modifiedScope Vector, baseScope Vector) bool
+```
+
+返回 Modified Scope 是否为 Changed。若 `modifiedScope` 为 `nil` 或 `Not Defined`（`X`），则回退到 `IsScopeChanged(baseScope)`。
+
+**示例:**
+```go
+ms, _ := vector.GetModifiedScope('X')
+base, _ := vector.GetScope('C')
+fmt.Printf("%v\n", vector.IsModifiedScopeChanged(ms, base)) // true（回退到 base）
+```
+
+## 接口使用模式
+
+### 通用向量处理
+
+```go
+func processVector(v vector.Vector) {
+    fmt.Printf("Processing %s metric\n", v.GetLongName())
+    fmt.Printf("  Group: %s\n", v.GetGroupName())
+    fmt.Printf("  Value: %s (%c)\n", v.GetLongValue(), v.GetShortValue())
+    fmt.Printf("  Score: %.3f\n", v.GetScore())
+    fmt.Printf("  Not defined: %v\n", v.IsNotDefined())
+    fmt.Printf("  Vector: %s\n", v.String())
 }
 
-func NewMetricFactory() *MetricFactory {
-    return &MetricFactory{
-        metrics: make(map[string]map[rune]Vector),
+// 用法
+processVector(vector.AttackVectorNetwork)
+```
+
+### 向量集合处理
+
+```go
+func processVectorCollection(vectors []vector.Vector) {
+    for i, v := range vectors {
+        fmt.Printf("Vector %d:\n", i+1)
+        processVector(v)
+        fmt.Println()
     }
 }
 
-func (f *MetricFactory) RegisterMetric(shortName string, value rune, metric Vector) {
-    if f.metrics[shortName] == nil {
-        f.metrics[shortName] = make(map[rune]Vector)
+// 用法
+vectors := []vector.Vector{
+    vector.AttackVectorNetwork,
+    vector.AttackComplexityLow,
+    vector.ConfidentialityHigh,
+}
+processVectorCollection(vectors)
+```
+
+### 向量校验
+
+```go
+func validateVector(v vector.Vector) error {
+    if v == nil {
+        return fmt.Errorf("vector is nil")
     }
-    f.metrics[shortName][value] = metric
+    if v.GetShortName() == "" {
+        return fmt.Errorf("metric short name cannot be empty")
+    }
+    if v.GetShortValue() == 0 {
+        return fmt.Errorf("metric short value cannot be empty")
+    }
+    if v.GetLongValue() == "" {
+        return fmt.Errorf("metric long value cannot be empty")
+    }
+    return nil
 }
 
-func (f *MetricFactory) CreateMetric(shortName string, value rune) (Vector, error) {
-    if metrics, exists := f.metrics[shortName]; exists {
-        if metric, exists := metrics[value]; exists {
-            return metric, nil
-        }
-    }
-    return nil, fmt.Errorf("未知指标: %s:%c", shortName, value)
+// 用法
+if err := validateVector(vector.AttackVectorNetwork); err != nil {
+    log.Printf("Validation failed: %v", err)
 }
 ```
 
-### 指标验证器
+### 按评分比较向量
 
 ```go
-type MetricValidator struct {
-    validValues map[string][]rune
-}
+func compareVectors(v1, v2 vector.Vector) int {
+    score1 := v1.GetScore()
+    score2 := v2.GetScore()
 
-func NewMetricValidator() *MetricValidator {
-    return &MetricValidator{
-        validValues: map[string][]rune{
-            "AV": {'N', 'A', 'L', 'P'},
-            "AC": {'L', 'H'},
-            "PR": {'N', 'L', 'H'},
-            "UI": {'N', 'R'},
-            "S":  {'U', 'C'},
-            "C":  {'N', 'L', 'H'},
-            "I":  {'N', 'L', 'H'},
-            "A":  {'N', 'L', 'H'},
-        },
+    if score1 < score2 {
+        return -1
+    } else if score1 > score2 {
+        return 1
     }
+    return 0
 }
 
-func (v *MetricValidator) ValidateMetric(metric Vector) error {
-    shortName := metric.GetShortName()
-    shortValue := metric.GetShortValue()
+// 用法
+av1 := vector.AttackVectorNetwork // 0.85
+av2 := vector.AttackVectorLocal   // 0.55
 
-    if validValues, exists := v.validValues[shortName]; exists {
-        for _, validValue := range validValues {
-            if shortValue == validValue {
-                return nil
-            }
-        }
-        return fmt.Errorf("指标 %s 的值 %c 无效", shortName, shortValue)
-    }
-
-    return fmt.Errorf("未知指标: %s", shortName)
-}
-```
-
-## 使用模式
-
-### 指标遍历
-
-```go
-func printMetricInfo(metric Vector) {
-    fmt.Printf("指标信息:\n")
-    fmt.Printf("  组: %s\n", metric.GetGroupName())
-    fmt.Printf("  短名称: %s\n", metric.GetShortName())
-    fmt.Printf("  完整名称: %s\n", metric.GetLongName())
-    fmt.Printf("  短值: %c\n", metric.GetShortValue())
-    fmt.Printf("  完整值: %s\n", metric.GetLongValue())
-    fmt.Printf("  描述: %s\n", metric.GetDescription())
-    fmt.Printf("  分数: %.2f\n", metric.GetScore())
-    fmt.Printf("  字符串: %s\n", metric.String())
-}
-```
-
-### 指标比较
-
-```go
-func compareMetrics(m1, m2 Vector) {
-    fmt.Printf("比较指标:\n")
-    fmt.Printf("指标1: %s\n", m1.String())
-    fmt.Printf("指标2: %s\n", m2.String())
-    
-    if m1.GetShortName() == m2.GetShortName() {
-        fmt.Printf("相同指标类型: %s\n", m1.GetLongName())
-        
-        if m1.GetShortValue() == m2.GetShortValue() {
-            fmt.Printf("相同值: %s\n", m1.GetLongValue())
-        } else {
-            fmt.Printf("不同值: %s vs %s\n", m1.GetLongValue(), m2.GetLongValue())
-            scoreDiff := m1.GetScore() - m2.GetScore()
-            fmt.Printf("分数差异: %.2f\n", scoreDiff)
-        }
-    } else {
-        fmt.Printf("不同指标类型: %s vs %s\n", m1.GetLongName(), m2.GetLongName())
-    }
+result := compareVectors(av1, av2)
+switch result {
+case -1:
+    fmt.Printf("%s has lower score than %s\n", av1.GetLongValue(), av2.GetLongValue())
+case 1:
+    fmt.Printf("%s has higher score than %s\n", av1.GetLongValue(), av2.GetLongValue())
+case 0:
+    fmt.Printf("%s has same score as %s\n", av1.GetLongValue(), av2.GetLongValue())
 }
 ```
 
 ## 最佳实践
 
-### 指标处理
+### 1. 优先使用单例和工厂，而非手工构造
 
-1. **类型安全**: 使用接口确保类型安全
-2. **验证**: 始终验证指标值的有效性
-3. **缓存**: 对频繁访问的指标进行缓存
-4. **错误处理**: 妥善处理无效指标
+预定义单例和工厂函数编码了完整的 CVSS 规范 —— 每个合法取值、其评分与描述。手工构造 `VectorImpl` 容易出现拼写错误和超出规范的取值。
 
-### 性能优化
+```go
+// 推荐：规范、经规格校验
+av, err := vector.GetAttackVector('N')
 
-1. **预计算**: 预计算常用指标的分数
-2. **池化**: 使用对象池减少内存分配
-3. **批处理**: 批量处理多个指标
+// 推荐：直接引用已知单例
+av := vector.AttackVectorNetwork
 
-### 扩展性
+// 避免：手工构造，无校验，易出错
+av := &vector.VectorImpl{ShortName: "AV", ShortValue: 'N', /* ... */}
+```
 
-1. **插件架构**: 支持自定义指标类型
-2. **配置驱动**: 通过配置文件定义指标
-3. **版本兼容**: 支持多个 CVSS 版本
+### 2. 用 IsNotDefined 短路环境修正
+
+应用修改后（环境）指标时，先检查 `IsNotDefined()` —— 取值为 `X` 表示"不修改基础指标"，其评分为无操作的 `1.0`。
+
+```go
+func applyModified(base, modified vector.Vector) vector.Vector {
+    if modified != nil && !modified.IsNotDefined() {
+        return modified
+    }
+    return base
+}
+```
+
+### 3. 对所需权限使用范围感知辅助函数
+
+由于 PR 的权重依赖 Scope，评分时务必使用 `GetPrivilegesRequiredScore` —— 切勿直接使用 `pr.GetScore()`。
+
+```go
+score := vector.GetPrivilegesRequiredScore(pr, vector.IsScopeChanged(scope))
+```
+
+### 4. 防范 nil
+
+对 `nil` 的 `Vector` 调用接口方法会 panic。评分辅助函数（`GetPrivilegesRequiredScore`、`GetUserInteractionScore`、`IsScopeChanged`）容忍 `nil` 并返回安全默认值，但直接方法调用不会 —— 当指标可能缺失时先检查 `nil`。
+
+```go
+func safeGetScore(v vector.Vector) (float64, error) {
+    if v == nil {
+        return 0, fmt.Errorf("vector is nil")
+    }
+    return v.GetScore(), nil
+}
+```
 
 ## 相关文档
 
-- [Vector 包概述](/zh/api/vector/) - Vector 包的完整文档
-- [CVSS 数据结构](/zh/api/cvss/cvss3x) - 了解 CVSS 数据结构
-- [解析器](/zh/api/parser/) - 了解如何解析指标
+- [vector 包概述](/zh/api/vector/)
+- [Cvss3x 数据结构](/zh/api/cvss/cvss3x)
+- [计算器](/zh/api/cvss/calculator)
+- [解析器实现](/zh/api/parser/cvss3x-parser)
+- [使用示例](/zh/examples/basic)
