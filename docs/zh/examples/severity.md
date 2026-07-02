@@ -39,8 +39,7 @@ func main() {
     fmt.Println("=== CVSS 严重性分类 ===")
     
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             log.Fatal(err)
         }
@@ -132,8 +131,7 @@ func demonstrateCustomSeverity() {
     fmt.Println("=== 自定义组织严重性映射 ===")
     
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -196,8 +194,7 @@ func getCustomSeverityRationale(score float64, vector *cvss.Cvss3x) string {
 func demonstrateIndustrySeverity() {
     vector := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:L"
     
-    parser := parser.NewCvss3xParser(vector)
-    parsedVector, _ := parser.Parse()
+    parsedVector, _ := parser.ParseString(vector)
     
     calculator := cvss.NewCalculator(parsedVector)
     score, _ := calculator.Calculate()
@@ -262,8 +259,7 @@ func filterBySeverity(vectors []string, minSeverity string) []VulnerabilityInfo 
     var filtered []VulnerabilityInfo
     
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             continue
         }
@@ -325,8 +321,7 @@ func prioritizeBySeverity(vectors []string) []PriorityItem {
     var items []PriorityItem
     
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             continue
         }
@@ -426,8 +421,7 @@ func analyzeSeverityDistribution(vectors []string) {
     validVectors := 0
     
     for _, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             continue
         }
@@ -514,8 +508,7 @@ func calculateSeverityDistribution(vectors []string) map[string]int {
     distribution := make(map[string]int)
     
     for _, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             continue
         }
@@ -540,8 +533,7 @@ func validateSeverityConsistency(vectors []string) []SeverityIssue {
     var issues []SeverityIssue
     
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             issues = append(issues, SeverityIssue{
                 VectorIndex: i,
