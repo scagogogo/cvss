@@ -1,21 +1,21 @@
-# Security Examples
+# 安全示例
 
-This guide demonstrates security best practices and patterns when using CVSS Skills in security-sensitive environments.
+本指南演示在安全敏感环境中使用 CVSS Skills 时的安全最佳实践和模式。
 
-## Overview
+## 概述
 
-Security considerations include:
+安全考量包括：
 
-- Input validation and sanitization
-- Secure data handling
-- Authentication and authorization
-- Audit logging
-- Secure communication
-- Vulnerability management
+- 输入校验与净化
+- 安全数据处理
+- 认证与授权
+- 审计日志
+- 安全通信
+- 漏洞管理
 
-## Input Validation
+## 输入校验
 
-### Comprehensive Input Validation
+### 全面输入校验
 
 ```go
 package security
@@ -40,60 +40,60 @@ func NewSecurityValidator() *SecurityValidator {
         blockedPatterns: []*regexp.Regexp{
             regexp.MustCompile(`<script`),           // XSS
             regexp.MustCompile(`javascript:`),       // XSS
-            regexp.MustCompile(`on\w+\s*=`),        // Event handlers
-            regexp.MustCompile(`\x00`),             // Null bytes
-            regexp.MustCompile(`\.\./`),            // Path traversal
-            regexp.MustCompile(`union\s+select`),   // SQL injection
-            regexp.MustCompile(`drop\s+table`),     // SQL injection
-            regexp.MustCompile(`exec\s*\(`),        // Command injection
+            regexp.MustCompile(`on\w+\s*=`),        // 事件处理器
+            regexp.MustCompile(`\x00`),             // 空字节
+            regexp.MustCompile(`\.\./`),            // 路径遍历
+            regexp.MustCompile(`union\s+select`),   // SQL 注入
+            regexp.MustCompile(`drop\s+table`),     // SQL 注入
+            regexp.MustCompile(`exec\s*\(`),        // 命令注入
         },
     }
 }
 
 func (sv *SecurityValidator) ValidateVector(vector string) error {
-    // Check for empty input
+    // 检查空输入
     if vector == "" {
-        return fmt.Errorf("vector cannot be empty")
+        return fmt.Errorf("向量不能为空")
     }
     
-    // Check length
+    // 检查长度
     if len(vector) > sv.maxVectorLength {
-        return fmt.Errorf("vector exceeds maximum length of %d characters", sv.maxVectorLength)
+        return fmt.Errorf("向量超过最大长度 %d 字符", sv.maxVectorLength)
     }
     
-    // Check for valid UTF-8
+    // 检查合法 UTF-8
     if !utf8.ValidString(vector) {
-        return fmt.Errorf("vector contains invalid UTF-8 characters")
+        return fmt.Errorf("向量包含无效的 UTF-8 字符")
     }
     
-    // Check for allowed characters only
+    // 检查只含允许的字符
     if !sv.allowedChars.MatchString(vector) {
-        return fmt.Errorf("vector contains invalid characters")
+        return fmt.Errorf("向量包含无效字符")
     }
     
-    // Check for blocked patterns
+    // 检查被阻止的模式
     for _, pattern := range sv.blockedPatterns {
         if pattern.MatchString(strings.ToLower(vector)) {
-            return fmt.Errorf("vector contains potentially malicious content")
+            return fmt.Errorf("向量包含潜在恶意内容")
         }
     }
     
-    // Validate CVSS format
+    // 校验 CVSS 格式
     if !strings.HasPrefix(vector, "CVSS:3.") {
-        return fmt.Errorf("vector must start with CVSS:3.x")
+        return fmt.Errorf("向量必须以 CVSS:3.x 开头")
     }
     
     return nil
 }
 
 func (sv *SecurityValidator) SanitizeVector(vector string) string {
-    // Remove null bytes
+    // 移除空字节
     vector = strings.ReplaceAll(vector, "\x00", "")
     
-    // Remove control characters
+    // 移除控制字符
     var sanitized strings.Builder
     for _, r := range vector {
-        if r >= 32 && r < 127 { // Printable ASCII only
+        if r >= 32 && r < 127 { // 仅可打印 ASCII
             sanitized.WriteRune(r)
         }
     }
@@ -102,7 +102,7 @@ func (sv *SecurityValidator) SanitizeVector(vector string) string {
 }
 ```
 
-### Rate Limiting
+### 速率限制
 
 ```go
 import (
@@ -145,7 +145,7 @@ func (rl *RateLimiter) CleanupExpired() {
     rl.mutex.Lock()
     defer rl.mutex.Unlock()
     
-    // Remove limiters that haven't been used recently
+    // 移除最近未使用的限流器
     for clientID, limiter := range rl.limiters {
         if limiter.Tokens() == float64(rl.burst) {
             delete(rl.limiters, clientID)
@@ -154,9 +154,9 @@ func (rl *RateLimiter) CleanupExpired() {
 }
 ```
 
-## Secure Data Handling
+## 安全数据处理
 
-### Sensitive Data Protection
+### 敏感数据保护
 
 ```go
 type SecureVectorProcessor struct {
@@ -175,13 +175,13 @@ func NewDataEncryptor(key []byte) *DataEncryptor {
 }
 
 func (de *DataEncryptor) Encrypt(data string) (string, error) {
-    // Implementation would use AES-GCM or similar
-    // This is a simplified example
+    // 实现应使用 AES-GCM 或类似算法
+    // 这是一个简化示例
     return base64.StdEncoding.EncodeToString([]byte(data)), nil
 }
 
 func (de *DataEncryptor) Decrypt(encryptedData string) (string, error) {
-    // Implementation would decrypt using AES-GCM
+    // 实现应使用 AES-GCM 解密
     decoded, err := base64.StdEncoding.DecodeString(encryptedData)
     if err != nil {
         return "", err
@@ -190,42 +190,42 @@ func (de *DataEncryptor) Decrypt(encryptedData string) (string, error) {
 }
 
 func (svp *SecureVectorProcessor) ProcessVector(ctx context.Context, vector string, clientID string) (*SecureResult, error) {
-    // Rate limiting
+    // 速率限制
     if !svp.rateLimiter.Allow(clientID) {
         svp.auditor.LogSecurityEvent(ctx, "RATE_LIMIT_EXCEEDED", clientID, vector)
-        return nil, fmt.Errorf("rate limit exceeded")
+        return nil, fmt.Errorf("超出速率限制")
     }
     
-    // Input validation
+    // 输入校验
     if err := svp.validator.ValidateVector(vector); err != nil {
         svp.auditor.LogSecurityEvent(ctx, "INVALID_INPUT", clientID, vector)
-        return nil, fmt.Errorf("validation failed: %w", err)
+        return nil, fmt.Errorf("校验失败: %w", err)
     }
     
-    // Sanitize input
+    // 净化输入
     sanitizedVector := svp.validator.SanitizeVector(vector)
     
-    // Process vector
+    // 处理向量
     parsedVector, err := parser.ParseString(sanitizedVector)
     if err != nil {
         svp.auditor.LogSecurityEvent(ctx, "PARSE_ERROR", clientID, sanitizedVector)
-        return nil, fmt.Errorf("parsing failed: %w", err)
+        return nil, fmt.Errorf("解析失败: %w", err)
     }
     
     calculator := cvss.NewCalculator(parsedVector)
     score, err := calculator.Calculate()
     if err != nil {
         svp.auditor.LogSecurityEvent(ctx, "CALCULATION_ERROR", clientID, sanitizedVector)
-        return nil, fmt.Errorf("calculation failed: %w", err)
+        return nil, fmt.Errorf("计算失败: %w", err)
     }
     
-    // Encrypt sensitive data if needed
+    // 如有需要则加密敏感数据
     encryptedVector, err := svp.encryptor.Encrypt(sanitizedVector)
     if err != nil {
-        return nil, fmt.Errorf("encryption failed: %w", err)
+        return nil, fmt.Errorf("加密失败: %w", err)
     }
     
-    // Log successful processing
+    // 记录成功处理
     svp.auditor.LogProcessingEvent(ctx, clientID, sanitizedVector, score)
     
     return &SecureResult{
@@ -246,9 +246,9 @@ type SecureResult struct {
 }
 ```
 
-## Authentication and Authorization
+## 认证与授权
 
-### JWT Authentication
+### JWT 认证
 
 ```go
 import (
@@ -279,7 +279,7 @@ func NewAuthService(publicKey, privateKey *rsa.Key, issuer string) *AuthService 
 func (as *AuthService) ValidateToken(tokenString string) (*Claims, error) {
     token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
         if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-            return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+            return nil, fmt.Errorf("意外的签名方法: %v", token.Header["alg"])
         }
         return as.publicKey, nil
     })
@@ -292,7 +292,7 @@ func (as *AuthService) ValidateToken(tokenString string) (*Claims, error) {
         return claims, nil
     }
     
-    return nil, fmt.Errorf("invalid token")
+    return nil, fmt.Errorf("无效令牌")
 }
 
 func (as *AuthService) HasPermission(claims *Claims, permission string) bool {
@@ -304,29 +304,29 @@ func (as *AuthService) HasPermission(claims *Claims, permission string) bool {
     return false
 }
 
-// Middleware for HTTP handlers
+// HTTP 处理器中间件
 func (as *AuthService) AuthMiddleware(requiredPermission string) func(http.Handler) http.Handler {
     return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
             authHeader := r.Header.Get("Authorization")
             if authHeader == "" {
-                http.Error(w, "Missing authorization header", http.StatusUnauthorized)
+                http.Error(w, "缺少授权头", http.StatusUnauthorized)
                 return
             }
             
             tokenString := strings.TrimPrefix(authHeader, "Bearer ")
             claims, err := as.ValidateToken(tokenString)
             if err != nil {
-                http.Error(w, "Invalid token", http.StatusUnauthorized)
+                http.Error(w, "无效令牌", http.StatusUnauthorized)
                 return
             }
             
             if !as.HasPermission(claims, requiredPermission) {
-                http.Error(w, "Insufficient permissions", http.StatusForbidden)
+                http.Error(w, "权限不足", http.StatusForbidden)
                 return
             }
             
-            // Add claims to context
+            // 将 claims 加入上下文
             ctx := context.WithValue(r.Context(), "claims", claims)
             next.ServeHTTP(w, r.WithContext(ctx))
         })
@@ -334,9 +334,9 @@ func (as *AuthService) AuthMiddleware(requiredPermission string) func(http.Handl
 }
 ```
 
-## Audit Logging
+## 审计日志
 
-### Comprehensive Audit Trail
+### 全面审计追踪
 
 ```go
 type AuditLogger struct {
@@ -379,7 +379,7 @@ func (al *AuditLogger) LogSecurityEvent(ctx context.Context, eventType, clientID
         Severity:  "HIGH",
     }
     
-    // Extract additional context
+    // 提取额外上下文
     if claims := ctx.Value("claims"); claims != nil {
         if c, ok := claims.(*Claims); ok {
             event.UserID = c.UserID
@@ -393,12 +393,12 @@ func (al *AuditLogger) LogSecurityEvent(ctx context.Context, eventType, clientID
         }
     }
     
-    // Log to structured logger
+    // 记录到结构化日志
     al.logger.WithFields(logrus.Fields{
         "audit_event": event,
-    }).Warn("Security event detected")
+    }).Warn("检测到安全事件")
     
-    // Store in database
+    // 存入数据库
     al.storeAuditEvent(event)
 }
 
@@ -411,13 +411,13 @@ func (al *AuditLogger) LogProcessingEvent(ctx context.Context, clientID, vector 
         Action:    "CVSS_PROCESSING",
         Resource:  "CVSS_VECTOR",
         Result:    "SUCCESS",
-        Details:   fmt.Sprintf("Vector processed successfully, score: %.1f", score),
+        Details:   fmt.Sprintf("向量处理成功，分数: %.1f", score),
         Severity:  "INFO",
     }
     
     al.logger.WithFields(logrus.Fields{
         "audit_event": event,
-    }).Info("Vector processed successfully")
+    }).Info("向量处理成功")
     
     al.storeAuditEvent(event)
 }
@@ -437,14 +437,14 @@ func (al *AuditLogger) storeAuditEvent(event *AuditEvent) {
     )
     
     if err != nil {
-        al.logger.WithError(err).Error("Failed to store audit event")
+        al.logger.WithError(err).Error("存储审计事件失败")
     }
 }
 ```
 
-## Secure Communication
+## 安全通信
 
-### TLS Configuration
+### TLS 配置
 
 ```go
 import (
@@ -481,17 +481,17 @@ func CreateSecureHTTPServer(handler http.Handler, certFile, keyFile string) *htt
 }
 ```
 
-### Certificate Validation
+### 证书校验
 
 ```go
 func ValidateClientCertificate(cert *x509.Certificate, caCert *x509.Certificate) error {
-    // Check if certificate is expired
+    // 检查证书是否过期
     now := time.Now()
     if now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
-        return fmt.Errorf("certificate is expired or not yet valid")
+        return fmt.Errorf("证书已过期或尚未生效")
     }
     
-    // Verify certificate chain
+    // 校验证书链
     roots := x509.NewCertPool()
     roots.AddCert(caCert)
     
@@ -501,16 +501,16 @@ func ValidateClientCertificate(cert *x509.Certificate, caCert *x509.Certificate)
     
     _, err := cert.Verify(opts)
     if err != nil {
-        return fmt.Errorf("certificate verification failed: %w", err)
+        return fmt.Errorf("证书校验失败: %w", err)
     }
     
     return nil
 }
 ```
 
-## Vulnerability Management
+## 漏洞管理
 
-### Security Scanning Integration
+### 安全扫描集成
 
 ```go
 type SecurityScanner struct {
@@ -523,19 +523,19 @@ type VulnerabilityDB struct {
 }
 
 func (vs *SecurityScanner) ScanVector(vector string) (*SecurityScanResult, error) {
-    // Parse vector to extract components
+    // 解析向量以提取组件
     parsedVector, err := parser.ParseString(vector)
     if err != nil {
         return nil, err
     }
     
-    // Check for known vulnerability patterns
+    // 检查已知漏洞模式
     threats := vs.checkKnownThreats(parsedVector)
     
-    // Analyze risk level
+    // 分析风险等级
     riskLevel := vs.assessRiskLevel(parsedVector, threats)
     
-    // Generate recommendations
+    // 生成建议
     recommendations := vs.generateRecommendations(parsedVector, threats)
     
     result := &SecurityScanResult{
@@ -546,7 +546,7 @@ func (vs *SecurityScanner) ScanVector(vector string) (*SecurityScanResult, error
         ScanTime:        time.Now(),
     }
     
-    // Alert on high-risk findings
+    // 高风险发现时告警
     if riskLevel == "HIGH" || riskLevel == "CRITICAL" {
         vs.alertManager.SendAlert(result)
     }
@@ -570,9 +570,9 @@ type ThreatIndicator struct {
 }
 ```
 
-## Security Testing
+## 安全测试
 
-### Security Test Suite
+### 安全测试套件
 
 ```go
 func TestSecurityValidation(t *testing.T) {
@@ -582,45 +582,45 @@ func TestSecurityValidation(t *testing.T) {
         name  string
         input string
     }{
-        {"XSS Script", "<script>alert('xss')</script>"},
-        {"SQL Injection", "'; DROP TABLE users; --"},
-        {"Path Traversal", "../../../etc/passwd"},
-        {"Null Byte", "CVSS:3.1\x00/AV:N"},
-        {"Command Injection", "CVSS:3.1; rm -rf /"},
-        {"Unicode Attack", "CVSS:3.1\u202e/AV:N"},
-        {"Overlong Input", strings.Repeat("A", 10000)},
+        {"XSS 脚本", "<script>alert('xss')</script>"},
+        {"SQL 注入", "'; DROP TABLE users; --"},
+        {"路径遍历", "../../../etc/passwd"},
+        {"空字节", "CVSS:3.1\x00/AV:N"},
+        {"命令注入", "CVSS:3.1; rm -rf /"},
+        {"Unicode 攻击", "CVSS:3.1‮/AV:N"},
+        {"超长输入", strings.Repeat("A", 10000)},
     }
     
     for _, test := range maliciousInputs {
         t.Run(test.name, func(t *testing.T) {
             err := validator.ValidateVector(test.input)
-            assert.Error(t, err, "Should reject malicious input: %s", test.input)
+            assert.Error(t, err, "应拒绝恶意输入: %s", test.input)
         })
     }
 }
 
 func TestRateLimiting(t *testing.T) {
-    limiter := NewRateLimiter(5, 10) // 5 requests per second, burst of 10
+    limiter := NewRateLimiter(5, 10) // 每秒 5 个请求，突发 10
     
     clientID := "test-client"
     
-    // Should allow initial burst
+    // 应允许初始突发
     for i := 0; i < 10; i++ {
-        assert.True(t, limiter.Allow(clientID), "Should allow request %d", i+1)
+        assert.True(t, limiter.Allow(clientID), "应允许请求 %d", i+1)
     }
     
-    // Should reject additional requests
-    assert.False(t, limiter.Allow(clientID), "Should reject request after burst")
+    // 应拒绝额外请求
+    assert.False(t, limiter.Allow(clientID), "突发后应拒绝请求")
     
-    // Wait and try again
+    // 等待后重试
     time.Sleep(200 * time.Millisecond)
-    assert.True(t, limiter.Allow(clientID), "Should allow request after wait")
+    assert.True(t, limiter.Allow(clientID), "等待后应允许请求")
 }
 ```
 
-## Security Monitoring
+## 安全监控
 
-### Real-time Security Monitoring
+### 实时安全监控
 
 ```go
 type SecurityMonitor struct {
@@ -650,7 +650,7 @@ func (sm *SecurityMonitor) RecordSecurityEvent(eventType string) {
     if threshold, exists := sm.alertThresholds[eventType]; exists {
         if sm.eventCounts[eventType] >= threshold {
             sm.alertManager.SendSecurityAlert(eventType, sm.eventCounts[eventType])
-            sm.eventCounts[eventType] = 0 // Reset counter
+            sm.eventCounts[eventType] = 0 // 重置计数器
         }
     }
 }
@@ -668,50 +668,50 @@ func (sm *SecurityMonitor) GetSecurityMetrics() map[string]int {
 }
 ```
 
-## Best Practices
+## 最佳实践
 
-### Security Checklist
+### 安全检查清单
 
-1. **Input Validation**
-   - Validate all inputs against strict patterns
-   - Sanitize inputs before processing
-   - Implement length limits
-   - Check for malicious patterns
+1. **输入校验**
+   - 对所有输入按严格模式校验
+   - 处理前净化输入
+   - 实施长度限制
+   - 检查恶意模式
 
-2. **Authentication & Authorization**
-   - Use strong authentication mechanisms
-   - Implement proper authorization checks
-   - Use secure token handling
-   - Validate permissions for each operation
+2. **认证与授权**
+   - 使用强认证机制
+   - 实施适当的授权检查
+   - 使用安全的令牌处理
+   - 对每个操作校验权限
 
-3. **Data Protection**
-   - Encrypt sensitive data at rest and in transit
-   - Use secure key management
-   - Implement proper data retention policies
-   - Sanitize logs and error messages
+3. **数据保护**
+   - 对静态和传输中的敏感数据加密
+   - 使用安全的密钥管理
+   - 实施适当的数据留存策略
+   - 净化日志和错误消息
 
-4. **Monitoring & Logging**
-   - Log all security-relevant events
-   - Implement real-time monitoring
-   - Set up alerting for suspicious activities
-   - Maintain audit trails
+4. **监控与日志**
+   - 记录所有安全相关事件
+   - 实施实时监控
+   - 为可疑活动设置告警
+   - 维护审计追踪
 
-5. **Network Security**
-   - Use TLS for all communications
-   - Implement proper certificate validation
-   - Configure secure cipher suites
-   - Use network segmentation
+5. **网络安全**
+   - 所有通信使用 TLS
+   - 实施适当的证书校验
+   - 配置安全的密码套件
+   - 使用网络分段
 
-## Next Steps
+## 下一步
 
-After implementing security measures:
+实施安全措施后：
 
-- [Monitoring](/examples/monitoring) - Security monitoring integration
-- [Risk Assessment](/examples/risk-assessment) - Risk-level analysis
-- [Production](/examples/production) - Production hardening checklist
+- [监控](/zh/examples/monitoring) - 安全监控集成
+- [风险评估](/zh/examples/risk-assessment) - 风险等级分析
+- [生产环境](/zh/examples/production) - 生产环境加固检查清单
 
-## Related Documentation
+## 相关文档
 
-- [Error Handling](/api/error-handling) - Secure error handling
-- [Performance](/examples/performance) - Performance under load
-- [Monitoring](/examples/monitoring) - Security monitoring
+- [错误处理](/zh/api/error-handling) - 安全的错误处理
+- [性能](/zh/examples/performance) - 负载下的性能
+- [监控](/zh/examples/monitoring) - 安全监控

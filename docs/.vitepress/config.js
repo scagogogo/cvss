@@ -179,7 +179,8 @@ export default withMermaid(defineConfig({
                 { text: '边缘情况', link: '/zh/examples/edge-cases' },
                 { text: '性能优化', link: '/zh/examples/performance' },
                 { text: '监控集成', link: '/zh/examples/monitoring' },
-                { text: '安全评估', link: '/zh/examples/risk-assessment' }
+                { text: '安全评估', link: '/zh/examples/security' },
+                { text: '风险评估', link: '/zh/examples/risk-assessment' }
               ]
             }
           ]
