@@ -108,10 +108,10 @@ CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
 
 ```go
 // 创建解析器
-parser := parser.NewCvss3xParser(vectorString)
+p := parser.NewCvss3xParser(vectorString)
 
 // 解析向量
-cvssVector, err := parser.Parse()
+cvssVector, err := p.Parse()
 ```
 
 ### 3. 计算器 (Calculator)

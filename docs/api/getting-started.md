@@ -108,10 +108,10 @@ The parser converts CVSS vector strings into structured objects:
 
 ```go
 // Create parser
-parser := parser.NewCvss3xParser(vectorString)
+p := parser.NewCvss3xParser(vectorString)
 
 // Parse vector
-cvssVector, err := parser.Parse()
+cvssVector, err := p.Parse()
 ```
 
 ### 3. Calculator
