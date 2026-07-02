@@ -93,7 +93,7 @@ func main() {
 
 ```go
 func analyzeTemporalMetrics(vector *cvss.Cvss3x) {
-    if !vector.HasTemporal() {
+    if !vector.HasTemporalMetrics() {
         fmt.Println("没有时间指标")
         return
     }
@@ -150,8 +150,7 @@ func demonstrateExploitMaturity() {
     fmt.Println("=== 漏洞利用代码成熟度影响 ===")
     
     for level, vectorStr := range exploitLevels {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             continue
         }
@@ -160,7 +159,7 @@ func demonstrateExploitMaturity() {
         score, _ := calculator.Calculate()
 
         fmt.Printf("%-12s: %.1f", level, score)
-        if vector.HasTemporal() && vector.Cvss3xTemporal.ExploitCodeMaturity != nil {
+        if vector.HasTemporalMetrics() && vector.Cvss3xTemporal.ExploitCodeMaturity != nil {
             multiplier := vector.Cvss3xTemporal.ExploitCodeMaturity.GetScore()
             fmt.Printf(" (乘数: %.2f)", multiplier)
         }
@@ -191,8 +190,7 @@ func trackExploitEvolution(baseVector string) {
     for i, stage := range stages {
         vectorStr := baseVector + "/" + stage.exploitCode
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -226,8 +224,7 @@ func demonstrateRemediationLevels() {
     fmt.Println("=== 修复级别影响 ===")
     
     for level, vectorStr := range remediationLevels {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             continue
         }
@@ -236,7 +233,7 @@ func demonstrateRemediationLevels() {
         score, _ := calculator.Calculate()
 
         fmt.Printf("%-8s: %.1f", level, score)
-        if vector.HasTemporal() && vector.Cvss3xTemporal.RemediationLevel != nil {
+        if vector.HasTemporalMetrics() && vector.Cvss3xTemporal.RemediationLevel != nil {
             multiplier := vector.Cvss3xTemporal.RemediationLevel.GetScore()
             fmt.Printf(" (乘数: %.2f)", multiplier)
         }
@@ -266,8 +263,7 @@ func trackRemediationProgress(baseVector string) {
     for _, entry := range timeline {
         vectorStr := baseVector + "/" + entry.remediation
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -299,8 +295,7 @@ func demonstrateReportConfidence() {
     fmt.Println("=== 报告可信度影响 ===")
     
     for level, vectorStr := range confidenceLevels {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             continue
         }
@@ -309,7 +304,7 @@ func demonstrateReportConfidence() {
         score, _ := calculator.Calculate()
 
         fmt.Printf("%-8s: %.1f", level, score)
-        if vector.HasTemporal() && vector.Cvss3xTemporal.ReportConfidence != nil {
+        if vector.HasTemporalMetrics() && vector.Cvss3xTemporal.ReportConfidence != nil {
             multiplier := vector.Cvss3xTemporal.ReportConfidence.GetScore()
             fmt.Printf(" (乘数: %.2f)", multiplier)
         }
@@ -338,8 +333,7 @@ func trackConfidenceEvolution(baseVector string) {
     for i, stage := range stages {
         vectorStr := baseVector + "/" + stage.confidence
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -402,8 +396,7 @@ func analyzeTemporalScenarios() {
     for _, scenario := range scenarios {
         vectorStr := baseVector + scenario.temporal
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -424,7 +417,7 @@ func analyzeTemporalScenarios() {
 
 ```go
 func explainTemporalCalculation(vector *cvss.Cvss3x) {
-    if !vector.HasTemporal() {
+    if !vector.HasTemporalMetrics() {
         fmt.Println("没有时间指标可分析")
         return
     }
@@ -432,8 +425,8 @@ func explainTemporalCalculation(vector *cvss.Cvss3x) {
     calculator := cvss.NewCalculator(vector)
     
     // 获取各个分数
-    baseScore, _ := calculator.CalculateBaseScore()
-    temporalScore, _ := calculator.CalculateTemporalScore()
+    baseScore, _ := calculator.GetBaseScore()
+    temporalScore, _ := calculator.GetTemporalScore()
 
     fmt.Println("=== 时间分数计算 ===")
     fmt.Printf("基础分数: %.1f\n", baseScore)
@@ -500,8 +493,7 @@ func assessRiskOverTime(baseVector string, days int) {
         }
 
         vectorStr := baseVector + entry.metrics
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -551,8 +543,7 @@ func manageVulnerabilityLifecycle(baseVector string) {
 
     for i, phase := range phases {
         vectorStr := baseVector + phase.metrics
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -578,7 +569,7 @@ func manageVulnerabilityLifecycle(baseVector string) {
 func validateTemporalMetrics(vector *cvss.Cvss3x) []string {
     var issues []string
 
-    if !vector.HasTemporal() {
+    if !vector.HasTemporalMetrics() {
         return issues
     }
 
