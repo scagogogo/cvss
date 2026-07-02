@@ -151,6 +151,13 @@ export default withMermaid(defineConfig({
                   items: [
                     { text: '向量接口', link: '/zh/api/vector/interface' }
                   ]
+                },
+                {
+                  text: '指南',
+                  collapsed: true,
+                  items: [
+                    { text: '错误处理', link: '/zh/api/error-handling' }
+                  ]
                 }
               ]
             }

@@ -95,7 +95,7 @@ There is no `*parser.ParseError` struct with `Position`/`Input`/`Expected` field
 
 ### CSVReadError
 
-Returned by the batch CSV reader (`CSVRead`), one per row that failed to parse:
+Returned by the batch CSV reader (`ReadCSVLax`), one per row that failed to parse:
 
 ```go
 type CSVReadError struct {
