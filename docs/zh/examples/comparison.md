@@ -42,8 +42,7 @@ func main() {
 
     // 解析所有向量并计算分数
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             log.Fatal(err)
         }
@@ -325,8 +324,7 @@ func trackVulnerabilityEvolution() {
     var previousScore float64
     
     for i, version := range versions {
-        parser := parser.NewCvss3xParser(version.vector)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(version.vector)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -590,9 +588,8 @@ func batchCompareVectors(vectors []string) {
     results := make([]ComparisonResult, len(vectors))
     
     for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
-        
+        vector, err := parser.ParseString(vectorStr)
+
         result := ComparisonResult{
             Index:  i,
             Vector: vectorStr,
