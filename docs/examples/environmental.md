@@ -89,7 +89,7 @@ func main() {
 
 ```go
 func analyzeEnvironmentalMetrics(vector *cvss.Cvss3x) {
-    if !vector.HasEnvironmental() {
+    if !vector.HasEnvironmentalMetrics() {
         fmt.Println("No environmental metrics present")
         return
     }
@@ -172,8 +172,7 @@ func demonstrateRequirementLevels() {
     for _, req := range requirements {
         vectorStr := baseVector + req.suffix
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -232,8 +231,7 @@ func demonstrateOrganizationalContexts() {
     for _, context := range contexts {
         vectorStr := baseVector + context.requirements
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -307,8 +305,7 @@ func demonstrateSecurityControls() {
     for _, control := range controls {
         vectorStr := baseVector + "/CR:H/IR:H/AR:H" + control.modified
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -378,8 +375,7 @@ func analyzeDefenseInDepth() {
     for i, layer := range layers {
         vectorStr := baseVector + "/CR:H/IR:H/AR:H" + layer.controls
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -400,7 +396,7 @@ func analyzeDefenseInDepth() {
 
 ```go
 func explainEnvironmentalCalculation(vector *cvss.Cvss3x) {
-    if !vector.HasEnvironmental() {
+    if !vector.HasEnvironmentalMetrics() {
         fmt.Println("No environmental metrics to analyze")
         return
     }
@@ -408,8 +404,8 @@ func explainEnvironmentalCalculation(vector *cvss.Cvss3x) {
     calculator := cvss.NewCalculator(vector)
     
     // Get individual scores
-    baseScore, _ := calculator.CalculateBaseScore()
-    envScore, _ := calculator.CalculateEnvironmentalScore()
+    baseScore, _ := calculator.GetBaseScore()
+    envScore, _ := calculator.GetEnvironmentalScore()
 
     fmt.Println("=== Environmental Score Calculation ===")
     fmt.Printf("Base Score: %.1f\n", baseScore)
@@ -466,8 +462,7 @@ func stepByStepEnvironmentalCalculation() {
     fmt.Println("=== Step-by-Step Environmental Calculation ===")
     fmt.Printf("Vector: %s\n\n", envVector)
     
-    parser := parser.NewCvss3xParser(envVector)
-    vector, _ := parser.Parse()
+    vector, _ := parser.ParseString(envVector)
     
     calculator := cvss.NewCalculator(vector)
     
@@ -484,7 +479,7 @@ func stepByStepEnvironmentalCalculation() {
     fmt.Println("  - Availability Requirement: Low (0.5x)")
     
     // Step 3: Final calculation
-    envScore, _ := calculator.CalculateEnvironmentalScore()
+    envScore, _ := calculator.GetEnvironmentalScore()
     fmt.Printf("\nStep 3: Final Environmental Score: %.1f\n", envScore)
 }
 ```
@@ -533,8 +528,7 @@ func assessRiskByEnvironment(baseVector string) {
     for _, env := range environments {
         vectorStr := baseVector + env.requirements + env.controls
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -600,8 +594,7 @@ func analyzeControlEffectiveness(baseVector string) {
     for _, control := range controls {
         vectorStr := baseVector + "/CR:H/IR:H/AR:H" + control.reduction
         
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, _ := parser.Parse()
+        vector, _ := parser.ParseString(vectorStr)
         
         calculator := cvss.NewCalculator(vector)
         score, _ := calculator.Calculate()
@@ -627,7 +620,7 @@ func analyzeControlEffectiveness(baseVector string) {
 func validateEnvironmentalMetrics(vector *cvss.Cvss3x) []string {
     var issues []string
 
-    if !vector.HasEnvironmental() {
+    if !vector.HasEnvironmentalMetrics() {
         return issues
     }
 
@@ -702,8 +695,7 @@ func testEnvironmentalScenarios() {
         fmt.Printf("\nTest: %s\n", tc.name)
         fmt.Printf("Vector: %s\n", tc.vector)
 
-        parser := parser.NewCvss3xParser(tc.vector)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(tc.vector)
 
         if tc.expectError {
             if err != nil {
