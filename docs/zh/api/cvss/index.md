@@ -49,19 +49,19 @@ cvssVector.Cvss3xBase.AttackComplexity = &vector.AttackComplexityLow{}
 calculator := cvss.NewCalculator(cvssVector)
 
 // 计算基础评分
-baseScore, err := calculator.CalculateBaseScore()
+baseScore, err := calculator.GetBaseScore()
 if err != nil {
     log.Fatal(err)
 }
 
 // 计算时间评分
-temporalScore, err := calculator.CalculateTemporalScore()
+temporalScore, err := calculator.GetTemporalScore()
 if err != nil {
     log.Fatal(err)
 }
 
 // 计算环境评分
-environmentalScore, err := calculator.CalculateEnvironmentalScore()
+environmentalScore, err := calculator.GetEnvironmentalScore()
 if err != nil {
     log.Fatal(err)
 }
@@ -119,29 +119,34 @@ cvss/
 └── utils.go              # 工具函数
 ```
 
-## 接口定义
+## 类型定义
 
-### Calculator 接口
+### Calculator
+
+`Calculator` 是一个结构体（非接口），用待评分的 `*Cvss3x` 构造：
 
 ```go
-type Calculator interface {
-    Calculate() (float64, error)
-    CalculateBaseScore() (float64, error)
-    CalculateTemporalScore() (float64, error)
-    CalculateEnvironmentalScore() (float64, error)
-    GetSeverityRating(score float64) string
-}
+type Calculator struct { /* 非导出：持有 *Cvss3x */ }
+
+func NewCalculator(cvss *Cvss3x) *Calculator
+func (c *Calculator) Calculate() (float64, error)
+func (c *Calculator) GetBaseScore() (float64, error)
+func (c *Calculator) GetTemporalScore() (float64, error)
+func (c *Calculator) GetEnvironmentalScore() (float64, error)
+func (c *Calculator) GetSeverityRating(score float64) Severity // Severity 是命名字符串类型
 ```
 
-### DistanceCalculator 接口
+### DistanceCalculator
+
+`DistanceCalculator` 同样是结构体（非接口），持有两个 `*Cvss3x`：
 
 ```go
-type DistanceCalculator interface {
-    EuclideanDistance() float64
-    ManhattanDistance() float64
-    ChebyshevDistance() float64
-    CosineSimilarity() float64
-}
+func NewDistanceCalculator(vector1, vector2 *Cvss3x) *DistanceCalculator
+func (dc *DistanceCalculator) EuclideanDistance() float64
+func (dc *DistanceCalculator) ManhattanDistance() float64
+func (dc *DistanceCalculator) HammingDistance() int
+func (dc *DistanceCalculator) JaccardSimilarity() float64
+func (dc *DistanceCalculator) ScoreDifference() float64
 ```
 
 ## 常用模式
@@ -240,33 +245,19 @@ func compareVectors(v1, v2 string) ComparisonResult {
 calculator := cvss.NewCalculator(vector)
 score, err := calculator.Calculate()
 if err != nil {
-    switch e := err.(type) {
-    case *cvss.InvalidVectorError:
-        log.Printf("无效向量: %s", e.Message)
-    case *cvss.CalculationError:
-        log.Printf("计算错误: %s", e.Message)
-    default:
-        log.Printf("未知错误: %v", err)
-    }
+    // Calculate 通过 Check() 返回普通 error（首个缺失/无效指标）
+    log.Printf("计算失败（向量不完整）: %v", err)
     return
 }
 ```
 
 ### 2. 资源管理
 
-```go
-// 对于大量计算，考虑使用对象池
-var calculatorPool = sync.Pool{
-    New: func() interface{} {
-        return cvss.NewCalculator(nil)
-    },
-}
+`Calculator` 在构造时绑定向量，没有 `SetVector` 方法，因此**不可**用对象池复用。每次评分构造新的 `Calculator`（开销很小）；若要批量评分，直接循环构造即可：
 
+```go
 func calculateScore(vector *cvss.Cvss3x) (float64, error) {
-    calc := calculatorPool.Get().(*cvss.Calculator)
-    defer calculatorPool.Put(calc)
-    
-    calc.SetVector(vector)
+    calc := cvss.NewCalculator(vector)
     return calc.Calculate()
 }
 ```

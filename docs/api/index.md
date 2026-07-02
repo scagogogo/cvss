@@ -123,39 +123,43 @@ jsonData, err := json.Marshal(vector)
 
 ### 🎯 Type Safety
 
-All APIs use strong typing to catch errors at compile time:
+APIs use concrete types, not interfaces-for-configurability. `Calculator` is a struct constructed with the vector to score:
 
 ```go
-type Calculator interface {
-    Calculate() (float64, error)
-    GetSeverityRating(score float64) string
-}
+type Calculator struct { /* unexported: holds the *Cvss3x */ }
+
+func NewCalculator(cvss *Cvss3x) *Calculator
+func (c *Calculator) Calculate() (float64, error)
+func (c *Calculator) GetSeverityRating(score float64) Severity // Severity is a named string type
 ```
 
-### 🔧 Flexible Configuration
+### 🔧 Convenience Functions
 
-Support multiple configuration options to adapt to different needs:
+One-shot helpers avoid manual multi-step setup; the parser binds its string at construction (there is no strict/relaxed toggle or `SetVector`):
 
 ```go
-// Strict mode parsing
-parser := parser.NewCvss3xParser(vectorStr)
-parser.SetStrictMode(true)
+// Parse + score in one call
+cv, score, severity, err := parser.ParseAndScore(vectorStr)
 
-// Tolerant mode parsing
-parser.SetStrictMode(false)
+// Accept input without the CVSS:3.1/ prefix
+cv, err := parser.ParseRelaxed(vectorStr, "3.1")
 ```
 
 ### 📊 Rich Error Information
 
-Provide detailed error information to help with debugging:
+Parse errors are sentinels (`ErrParserMagicHead`, `ErrDuplicateMetric`) or `fmt.Errorf`; validation errors come from the `cvss` package as `ValidationErrors`:
 
 ```go
 if err != nil {
-    switch e := err.(type) {
-    case *parser.ParseError:
-        fmt.Printf("Parse error: %s (position: %d)", e.Message, e.Position)
-    case *cvss.CalculationError:
-        fmt.Printf("Calculation error: %s", e.Message)
+    if errors.Is(err, parser.ErrParserMagicHead) {
+        log.Printf("not a CVSS vector: %v", err)
+    }
+}
+if err := cv.Validate(); err != nil {
+    if ve, ok := err.(cvss.ValidationErrors); ok {
+        for _, m := range ve.MissingMetrics() {
+            fmt.Printf("missing metric: %s\n", m)
+        }
     }
 }
 ```

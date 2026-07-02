@@ -94,39 +94,43 @@ jsonData, err := json.Marshal(vector)
 
 ### 🎯 类型安全
 
-所有 API 都使用强类型设计，在编译时捕获错误：
+API 使用具体类型，而非为可配置性而设的接口。`Calculator` 是一个结构体，用待评分向量构造：
 
 ```go
-type Calculator interface {
-    Calculate() (float64, error)
-    GetSeverityRating(score float64) string
-}
+type Calculator struct { /* 非导出：持有 *Cvss3x */ }
+
+func NewCalculator(cvss *Cvss3x) *Calculator
+func (c *Calculator) Calculate() (float64, error)
+func (c *Calculator) GetSeverityRating(score float64) Severity // Severity 是命名字符串类型
 ```
 
-### 🔧 灵活配置
+### 🔧 便捷函数
 
-支持多种配置选项以适应不同需求：
+一行简写免去手动多步配置；解析器在构造时绑定字符串（没有严格/宽松开关，也没有 `SetVector`）：
 
 ```go
-// 严格模式解析
-parser := parser.NewCvss3xParser(vectorStr)
-parser.SetStrictMode(true)
+// 一步完成解析 + 评分
+cv, score, severity, err := parser.ParseAndScore(vectorStr)
 
-// 容错模式解析
-parser.SetStrictMode(false)
+// 接受不带 CVSS:3.1/ 前缀的输入
+cv, err := parser.ParseRelaxed(vectorStr, "3.1")
 ```
 
 ### 📊 丰富的错误信息
 
-提供详细的错误信息帮助调试：
+解析错误是哨兵错误（`ErrParserMagicHead`、`ErrDuplicateMetric`）或 `fmt.Errorf`；验证错误来自 `cvss` 包的 `ValidationErrors`：
 
 ```go
 if err != nil {
-    switch e := err.(type) {
-    case *parser.ParseError:
-        fmt.Printf("解析错误: %s (位置: %d)", e.Message, e.Position)
-    case *cvss.CalculationError:
-        fmt.Printf("计算错误: %s", e.Message)
+    if errors.Is(err, parser.ErrParserMagicHead) {
+        log.Printf("非 CVSS 向量: %v", err)
+    }
+}
+if err := cv.Validate(); err != nil {
+    if ve, ok := err.(cvss.ValidationErrors); ok {
+        for _, m := range ve.MissingMetrics() {
+            fmt.Printf("缺少指标: %s\n", m)
+        }
     }
 }
 ```

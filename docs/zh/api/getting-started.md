@@ -204,20 +204,23 @@ if err != nil {
 
 ## 错误处理
 
-CVSS Skills 提供详细的错误信息：
+CVSS Skills 将解析错误以哨兵错误或 `fmt.Errorf` 形式返回，验证错误以 `cvss.ValidationErrors` 形式返回：
 
 ```go
-vector, err := parser.Parse()
+cv, err := parser.ParseString(vectorStr)
 if err != nil {
-    switch e := err.(type) {
-    case *parser.ParseError:
-        fmt.Printf("解析错误: %s\n", e.Error())
-        fmt.Printf("错误位置: %d\n", e.Position)
-    case *parser.ValidationError:
-        fmt.Printf("验证错误: %s\n", e.Error())
-        fmt.Printf("无效的指标: %s\n", e.Metric)
-    default:
-        fmt.Printf("未知错误: %v\n", err)
+    if errors.Is(err, parser.ErrParserMagicHead) {
+        fmt.Printf("不是 CVSS 向量（缺少 'CVSS:' 前缀）\n")
+    }
+    log.Fatal(err)
+}
+
+// 完整性检查独立于解析
+if err := cv.Validate(); err != nil {
+    if ve, ok := err.(cvss.ValidationErrors); ok {
+        for _, m := range ve.MissingMetrics() {
+            fmt.Printf("缺少指标: %s\n", m)
+        }
     }
 }
 ```
@@ -242,14 +245,17 @@ fmt.Printf("评分 %.1f 对应严重性: %s\n", score, severity) // High
 
 ## 性能提示
 
-### 1. 重用解析器
+### 1. 使用便捷函数
+
+`Cvss3xParser` 在构造时绑定输入字符串，不可重用——没有 `SetVector`。单次解析请使用 `parser.ParseString`，它每次都构造新的解析器：
 
 ```go
-// 好的做法：重用解析器
-parser := parser.NewCvss3xParser("")
+// 好的做法：每个向量一次性解析
 for _, vectorStr := range vectors {
-    parser.SetVector(vectorStr)
-    vector, err := parser.Parse()
+    vector, err := parser.ParseString(vectorStr)
+    if err != nil {
+        continue
+    }
     // 处理向量...
 }
 ```

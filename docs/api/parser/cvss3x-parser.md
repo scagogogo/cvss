@@ -1,309 +1,214 @@
 # Cvss3xParser - CVSS 3.x Parser
 
-`Cvss3xParser` is a specialized parser for parsing CVSS 3.x vector strings. It provides flexible parsing options, detailed error handling, and high-performance parsing capabilities for both CVSS 3.0 and 3.1 formats.
+`Cvss3xParser` is a specialized parser for CVSS 3.x vector strings. The string is supplied at construction time and the parser is consumed once via `Parse()`.
 
 ## Parsing Flow
 
-Parsing splits the string on `/`, reads the version prefix, then walks each `KEY:VALUE` metric segment. Strict mode controls how unknown/missing metrics are treated:
+Parsing reads the `CVSS:` magic head, the version, then walks each `/KEY:VALUE` segment. Unknown metric names and illegal values surface as errors; the parser does not silently drop them:
 
 ```mermaid
 flowchart TD
-    In["CVSS:3.1/AV:N/AC:L/..."] --> Split["split on '/'"]
-    Split --> Prefix{First segment<br/>= CVSS:3.0 / 3.1?}
-    Prefix -->|No & strict| Err1["ParseError:<br/>missing/invalid prefix"]
-    Prefix -->|No & relaxed| Assume["assume 3.1, continue"]
-    Prefix -->|Yes| Loop
-    Assume --> Loop
-    Loop["for each KEY:VALUE"] --> Known{Known metric<br/>& legal value?}
-    Known -->|No & strict| Err2["ParseError:<br/>position + reason"]
-    Known -->|No & relaxed| Skip["skip segment"]
+    In["CVSS:3.1/AV:N/AC:L/..."] --> Head{"starts with<br/>'CVSS:'?"}
+    Head -->|No| Err1["ErrParserMagicHead"]
+    Head -->|Yes| Ver{version 3.0 / 3.1?}
+    Ver -->|No| ErrV["fmt.Errorf:<br/>unsupported version"]
+    Ver -->|Yes| Loop
+    Loop["for each /KEY:VALUE"] --> Dup{seen KEY?}
+    Dup -->|Yes| ErrD["ErrDuplicateMetric"]
+    Dup -->|No| Known{GetVectorByShortName<br/>knows KEY:VALUE?}
+    Known -->|No| Err2["fmt.Errorf:<br/>unknown/illegal value"]
     Known -->|Yes| Set["set metric on Cvss3x"]
-    Skip --> Loop
     Set --> Loop
-    Loop -->|done| Complete{allowMissing<br/>or all 8 base set?}
-    Complete -->|No| Err3["ValidationErrors:<br/>MissingMetrics()"]
-    Complete -->|Yes| Ok(["*cvss.Cvss3x"])
+    Loop -->|done| Out(["*cvss.Cvss3x"])
+    Out --> Check{Check() / Validate()}
+    Check -->|missing base| Err3["cvss.ValidationErrors<br/>MissingMetrics()"]
 
     classDef err fill:#fff1f0,stroke:#ff4d4f,color:#a8071a;
-    class Err1,Err2,Err3 err;
+    class Err1,ErrV,ErrD,Err2,Err3 err;
 ```
+
+Note that `Parse()` itself does **not** enforce completeness — it returns a `*Cvss3x` even if base metrics are missing. Call `Check()` (first missing metric) or `Validate()` (all of them, as `cvss.ValidationErrors`) afterwards to enforce the required base metrics.
 
 ## Type Definition
 
+`Cvss3xParser` holds the input string and parse cursor. Its fields are unexported; you construct it with `NewCvss3xParser` and call `Parse`:
+
 ```go
 type Cvss3xParser struct {
-    vector      string
-    strictMode  bool
-    allowMissing bool
-    validator   func(metric, value string) error
+    // unexported: input string, rune cursor, parsed-key set, result *cvss.Cvss3x
 }
+
+func NewCvss3xParser(cvss3xStr string) *Cvss3xParser
+func (x *Cvss3xParser) Parse() (*cvss.Cvss3x, error)
 ```
 
-## Creating Parser
+## Creating a Parser
 
 ### NewCvss3xParser
 
 ```go
-func NewCvss3xParser(vector string) *Cvss3xParser
+func NewCvss3xParser(cvss3xStr string) *Cvss3xParser
 ```
 
-Creates a new CVSS 3.x parser instance.
+Creates a new CVSS 3.x parser bound to the given vector string. The string is trimmed of surrounding whitespace.
 
 **Parameters:**
-- `vector`: The CVSS vector string to parse
+- `cvss3xStr`: The CVSS vector string to parse
 
 **Returns:**
 - `*Cvss3xParser`: Parser instance
 
 **Example:**
 ```go
-parser := parser.NewCvss3xParser("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+p := parser.NewCvss3xParser("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
 ```
 
-## Main Methods
+::: warning There is no SetVector — parsers are not reusable
+The vector string is fixed at construction. There is no `SetVector` method to rebind a parser to a new string. To parse another vector, construct a new parser (they are cheap) or use the `parser.ParseString` convenience function.
+:::
+
+## Main Method
 
 ### Parse
 
 ```go
-func (p *Cvss3xParser) Parse() (*cvss.Cvss3x, error)
+func (x *Cvss3xParser) Parse() (*cvss.Cvss3x, error)
 ```
 
-Parses the CVSS vector string and returns a structured CVSS object.
+Parses the bound vector string and returns a structured `*cvss.Cvss3x`. Returns an error for an invalid magic head, unsupported version, duplicate metric key, unknown metric name, or illegal metric value.
 
 **Returns:**
-- `*cvss.Cvss3x`: The parsed CVSS vector object
-- `error`: Parse error
+- `*cvss.Cvss3x`: The parsed CVSS vector object (always non-nil on nil error)
+- `error`: Parse error — a sentinel (`ErrParserMagicHead`, `ErrDuplicateMetric`) or a `fmt.Errorf` describing the problem
 
 **Example:**
 ```go
-vector, err := parser.Parse()
+vector, err := p.Parse()
 if err != nil {
     log.Fatalf("Parse failed: %v", err)
 }
-
 fmt.Printf("Parse successful: %s\n", vector.String())
 ```
 
-### SetVector
+## Convenience Functions
+
+The `parser` package provides one-shot helpers that construct a parser, parse, and (for some) validate or score in a single call:
+
+| Function | Signature | Behavior |
+|----------|-----------|----------|
+| `ParseString` | `(str string) (*cvss.Cvss3x, error)` | `NewCvss3xParser(str).Parse()` |
+| `MustParse` | `(str string) *cvss.Cvss3x` | like `ParseString` but panics on error |
+| `ParseRelaxed` | `(str, defaultVersion string) (*cvss.Cvss3x, error)` | accepts a string without the `CVSS:3.1/` prefix; prepends `CVSS:<defaultVersion>/` (defaults to `"3.1"`) |
+| `ParseAndValidate` | `(str string) (*cvss.Cvss3x, error)` | parse, then `Validate()` — fails if base metrics are missing |
+| `ParseAndScore` | `(str string) (*cvss.Cvss3x, float64, cvss.Severity, error)` | parse, then calculate base score and severity |
 
 ```go
-func (p *Cvss3xParser) SetVector(vector string)
+// One-liner
+cv, err := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+
+// No-prefix input
+cv, err := parser.ParseRelaxed("AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "3.1")
+
+// Parse + validate (rejects incomplete vectors)
+cv, err := parser.ParseAndValidate("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+
+// Parse + score
+cv, score, severity, err := parser.ParseAndScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
 ```
-
-Sets the vector string to parse. Used for reusing parser instances.
-
-**Parameters:**
-- `vector`: New CVSS vector string
-
-**Example:**
-```go
-parser := parser.NewCvss3xParser("")
-
-vectors := []string{
-    "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-    "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:L",
-}
-
-for _, vectorStr := range vectors {
-    parser.SetVector(vectorStr)
-    vector, err := parser.Parse()
-    if err != nil {
-        continue
-    }
-    
-    // Process vector...
-}
-```
-
-### SetStrictMode
-
-```go
-func (p *Cvss3xParser) SetStrictMode(strict bool)
-```
-
-Sets the parser's strict mode.
-
-**Parameters:**
-- `strict`: Whether to enable strict mode
-
-**Strict Mode Features:**
-- Strict validation of vector format
-- No unknown metrics allowed
-- All required metrics must be present
-- Strict value validation
-
-**Example:**
-```go
-parser := parser.NewCvss3xParser(vectorStr)
-parser.SetStrictMode(true) // Enable strict mode
-
-vector, err := parser.Parse()
-```
-
-### SetAllowMissingMetrics
-
-```go
-func (p *Cvss3xParser) SetAllowMissingMetrics(allow bool)
-```
-
-Sets whether to allow missing certain metrics.
-
-**Parameters:**
-- `allow`: Whether to allow missing metrics
-
-**Example:**
-```go
-parser := parser.NewCvss3xParser(vectorStr)
-parser.SetAllowMissingMetrics(true) // Allow missing certain metrics
-
-vector, err := parser.Parse()
-```
-
-### SetCustomValidator
-
-```go
-func (p *Cvss3xParser) SetCustomValidator(validator func(metric, value string) error)
-```
-
-Sets a custom validation function.
-
-**Parameters:**
-- `validator`: Custom validation function
-
-**Example:**
-```go
-parser := parser.NewCvss3xParser(vectorStr)
-parser.SetCustomValidator(func(metric, value string) error {
-    // Custom validation logic
-    if metric == "AV" && value == "X" {
-        return fmt.Errorf("unsupported attack vector value: %s", value)
-    }
-    return nil
-})
-
-vector, err := parser.Parse()
-```
-
-## Parsing Process
-
-### 1. Lexical Analysis
-
-The parser first breaks down the vector string into tokens:
-
-```
-CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
-```
-
-Breaks down into:
-- Version: `CVSS:3.1`
-- Metrics: `AV:N`, `AC:L`, `PR:N`, etc.
-
-### 2. Syntax Analysis
-
-Validates the syntax structure of the vector:
-- Check version format
-- Validate metric format
-- Ensure correct separators
-
-### 3. Semantic Validation
-
-Validates the semantic correctness of metrics:
-- Check metric name validity
-- Validate metric value legality
-- Ensure required metrics exist
-
-### 4. Object Construction
-
-Builds CVSS object based on parse results:
-- Create appropriate vector objects
-- Set metric values
-- Establish object relationships
 
 ## Error Handling
 
-### Error Types
+`Parse` returns one of two kinds of error:
 
-#### ParseError
+### Sentinel errors
 
 ```go
-type ParseError struct {
-    Message  string
-    Position int
-    Input    string
-}
+var ErrParserMagicHead = errors.New("cvss 3.x parser error: invalid magic head, it must equal 'CVSS'")
+var ErrDuplicateMetric = errors.New("cvss 3.x parser error: duplicate metric key")
 ```
 
-Represents errors during parsing.
+Detect them with `errors.Is`:
 
-**Example:**
 ```go
-vector, err := parser.Parse()
+vector, err := p.Parse()
 if err != nil {
-    if parseErr, ok := err.(*parser.ParseError); ok {
-        fmt.Printf("Parse error: %s\n", parseErr.Message)
-        fmt.Printf("Error position: %d\n", parseErr.Position)
-        fmt.Printf("Input content: %s\n", parseErr.Input)
+    if errors.Is(err, parser.ErrParserMagicHead) {
+        log.Fatal("input is not a CVSS vector (missing 'CVSS:' prefix)")
     }
+    if errors.Is(err, parser.ErrDuplicateMetric) {
+        log.Fatalf("duplicate metric: %v", err)
+    }
+    // otherwise a fmt.Errorf describing an unsupported version,
+    // unknown metric name, or illegal metric value
+    log.Fatal(err)
 }
 ```
 
-#### ValidationError
+### Validation errors (after parsing)
+
+Completeness is checked separately via the `cvss` package, not the parser:
 
 ```go
-type ValidationError struct {
-    Message string
-    Metric  string
-    Value   string
-}
-```
-
-Represents errors during validation.
-
-**Example:**
-```go
-vector, err := parser.Parse()
+cv, err := parser.ParseString(vectorStr)
 if err != nil {
-    if valErr, ok := err.(*parser.ValidationError); ok {
-        fmt.Printf("Validation error: %s\n", valErr.Message)
-        fmt.Printf("Problem metric: %s\n", valErr.Metric)
-        fmt.Printf("Problem value: %s\n", valErr.Value)
-    }
+    return err
 }
-```
-
-### Error Handling Best Practices
-
-```go
-func parseWithErrorHandling(vectorStr string) (*cvss.Cvss3x, error) {
-    parser := parser.NewCvss3xParser(vectorStr)
-    
-    vector, err := parser.Parse()
-    if err != nil {
-        switch e := err.(type) {
-        case *parser.ParseError:
-            return nil, fmt.Errorf("parse error at position %d: %s", e.Position, e.Message)
-        case *parser.ValidationError:
-            return nil, fmt.Errorf("validation error - metric %s value %s: %s", e.Metric, e.Value, e.Message)
-        default:
-            return nil, fmt.Errorf("unknown parse error: %w", err)
+if err := cv.Validate(); err != nil {
+    if ve, ok := err.(cvss.ValidationErrors); ok {
+        for _, m := range ve.MissingMetrics() {
+            fmt.Printf("missing metric: %s\n", m)
         }
     }
-    
-    return vector, nil
+}
+```
+
+## Batch Operations
+
+For parsing many vectors concurrently, use the package-level batch helpers:
+
+```go
+type BatchParseResult struct {
+    Index  int          // original input index
+    Vector *cvss.Cvss3x // nil on error
+    Error  error        // nil on success
+}
+
+func BatchParse(vectors []string, workerCount int) []BatchParseResult
+
+type BatchValidateResult struct {
+    Index  int
+    Vector *cvss.Cvss3x
+    Valid  bool
+    Errors []string
+    Error  error
+}
+
+func BatchValidate(vectors []string, workerCount int) []BatchValidateResult
+```
+
+`workerCount <= 0` uses `len(vectors)` workers. Results are returned in input order.
+
+```go
+results := parser.BatchParse([]string{
+    "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+    "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:C/C:L/I:L/A:N",
+    "not-a-vector",
+}, 4)
+for _, r := range results {
+    if r.Error != nil {
+        fmt.Printf("index %d failed: %v\n", r.Index, r.Error)
+        continue
+    }
+    fmt.Printf("index %d: %s\n", r.Index, r.Vector.String())
 }
 ```
 
 ## Supported Vector Formats
 
-### CVSS 3.0
+### CVSS 3.0 / 3.1
 
 ```
 CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
-```
-
-### CVSS 3.1
-
-```
 CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
 ```
 
@@ -316,7 +221,7 @@ CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:F/RL:O/RC:C
 ### With Environmental Metrics
 
 ```
-CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/CR:H/IR:H/AR:H
+CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/CR:H/IR:H/AR:H/MAV:L
 ```
 
 ## Usage Examples
@@ -329,160 +234,96 @@ package main
 import (
     "fmt"
     "log"
-    
+
     "github.com/scagogogo/cvss-skills/pkg/parser"
 )
 
 func main() {
     vectorStr := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-    
-    // Create parser
-    parser := parser.NewCvss3xParser(vectorStr)
-    
-    // Parse vector
-    vector, err := parser.Parse()
+
+    p := parser.NewCvss3xParser(vectorStr)
+    vector, err := p.Parse()
     if err != nil {
         log.Fatalf("Parse failed: %v", err)
     }
-    
-    // Output results
+
     fmt.Printf("Original vector: %s\n", vectorStr)
-    fmt.Printf("Parsed result: %s\n", vector.String())
-    fmt.Printf("Version: %d.%d\n", vector.MajorVersion, vector.MinorVersion)
+    fmt.Printf("Parsed result:   %s\n", vector.String())
+    fmt.Printf("Version:         %d.%d\n", vector.MajorVersion, vector.MinorVersion)
 }
 ```
 
-### Batch Parsing
+### Parsing a Batch
 
 ```go
 func parseBatch(vectors []string) {
-    for i, vectorStr := range vectors {
-        parser := parser.NewCvss3xParser(vectorStr)
-        
-        vector, err := parser.Parse()
-        if err != nil {
-            fmt.Printf("Vector %d parse failed: %v\n", i+1, err)
+    results := parser.BatchParse(vectors, 4)
+    for _, r := range results {
+        if r.Error != nil {
+            fmt.Printf("Vector %d parse failed: %v\n", r.Index+1, r.Error)
             continue
         }
-        
-        fmt.Printf("Vector %d: %s -> Parse successful\n", i+1, vectorStr)
+        fmt.Printf("Vector %d: %s -> OK\n", r.Index+1, r.Vector.String())
     }
 }
 ```
 
-### Tolerant Parsing
+### Tolerant Parsing (no prefix)
+
+Use `ParseRelaxed` when the input may lack the `CVSS:3.1/` prefix:
 
 ```go
-func tolerantParsing(vectorStr string) (*cvss.Cvss3x, error) {
-    parser := parser.NewCvss3xParser(vectorStr)
-    
-    // Enable tolerant mode
-    parser.SetStrictMode(false)
-    parser.SetAllowMissingMetrics(true)
-    
-    // Set custom validator
-    parser.SetCustomValidator(func(metric, value string) error {
-        // Allow certain non-standard values
-        if metric == "AV" && value == "X" {
-            return nil // Ignore unknown values
-        }
-        return nil
-    })
-    
-    return parser.Parse()
+// Accepts "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" — assumes 3.1
+cv, err := parser.ParseRelaxed("AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "3.1")
+if err != nil {
+    log.Fatal(err)
 }
+fmt.Println(cv.String()) // CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
 ```
 
-### Strict Parsing
+### Parse-and-Validate (reject incomplete vectors)
 
 ```go
-func strictParsing(vectorStr string) (*cvss.Cvss3x, error) {
-    parser := parser.NewCvss3xParser(vectorStr)
-    
-    // Enable strict mode
-    parser.SetStrictMode(true)
-    parser.SetAllowMissingMetrics(false)
-    
-    // Set strict custom validator
-    parser.SetCustomValidator(func(metric, value string) error {
-        // Additional validation logic
-        if metric == "AV" && value == "N" {
-            // Check additional conditions for network attack vector
-            return nil
-        }
-        return nil
-    })
-    
-    return parser.Parse()
+cv, err := parser.ParseAndValidate("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U")
+if err != nil {
+    // either a parse error, or a cvss.ValidationErrors listing missing metrics
+    log.Fatal(err)
 }
+fmt.Println(cv.String())
 ```
 
 ## Performance Optimization
 
-### Reuse Parser
-
-```go
-type VectorProcessor struct {
-    parser *parser.Cvss3xParser
-}
-
-func NewVectorProcessor() *VectorProcessor {
-    return &VectorProcessor{
-        parser: parser.NewCvss3xParser(""),
-    }
-}
-
-func (vp *VectorProcessor) ProcessVector(vectorStr string) (*cvss.Cvss3x, error) {
-    vp.parser.SetVector(vectorStr)
-    return vp.parser.Parse()
-}
-```
-
 ### Concurrent Parsing
+
+`Cvss3xParser` holds mutable cursor state, so one parser must not be shared across goroutines. Construct a fresh parser per vector (or use `BatchParse`, which does this for you):
 
 ```go
 func parseVectorsConcurrently(vectors []string) []*cvss.Cvss3x {
     results := make([]*cvss.Cvss3x, len(vectors))
     var wg sync.WaitGroup
-    
+
     for i, vectorStr := range vectors {
         wg.Add(1)
-        go func(index int, vector string) {
+        go func(index int, s string) {
             defer wg.Done()
-            
-            parser := parser.NewCvss3xParser(vector)
-            result, err := parser.Parse()
+            cv, err := parser.ParseString(s) // fresh parser per goroutine
             if err != nil {
                 results[index] = nil
                 return
             }
-            
-            results[index] = result
+            results[index] = cv
         }(i, vectorStr)
     }
-    
+
     wg.Wait()
     return results
 }
 ```
 
-### Object Pool
-
-```go
-var parserPool = sync.Pool{
-    New: func() interface{} {
-        return parser.NewCvss3xParser("")
-    },
-}
-
-func parseWithPool(vectorStr string) (*cvss.Cvss3x, error) {
-    parser := parserPool.Get().(*parser.Cvss3xParser)
-    defer parserPool.Put(parser)
-    
-    parser.SetVector(vectorStr)
-    return parser.Parse()
-}
-```
+::: warning Do not pool parsers
+A `sync.Pool` of `*Cvss3xParser` reusing a single instance via a non-existent `SetVector` is not supported — the input string is fixed at construction. Pooling plain strings and calling `ParseString` is fine; pooling parser objects is not.
+:::
 
 ## Best Practices
 
@@ -493,60 +334,33 @@ func validateInput(vectorStr string) error {
     if vectorStr == "" {
         return fmt.Errorf("vector string cannot be empty")
     }
-    
     if len(vectorStr) > 1000 {
         return fmt.Errorf("vector string too long")
     }
-    
-    if !strings.HasPrefix(vectorStr, "CVSS:") {
-        return fmt.Errorf("invalid vector format")
+    if !strings.HasPrefix(strings.ToUpper(vectorStr), "CVSS:") {
+        // ParseRelaxed can handle prefix-less input; otherwise this is an error
+        return fmt.Errorf("invalid vector format (missing 'CVSS:' prefix)")
     }
-    
     return nil
 }
 ```
 
-### 2. Error Recovery
-
-```go
-func parseWithRecovery(vectorStr string) (*cvss.Cvss3x, error) {
-    // First try strict parsing
-    parser := parser.NewCvss3xParser(vectorStr)
-    parser.SetStrictMode(true)
-    
-    vector, err := parser.Parse()
-    if err == nil {
-        return vector, nil
-    }
-    
-    // If failed, try tolerant parsing
-    parser.SetStrictMode(false)
-    parser.SetAllowMissingMetrics(true)
-    
-    return parser.Parse()
-}
-```
-
-### 3. Logging
+### 2. Logging
 
 ```go
 func parseWithLogging(vectorStr string) (*cvss.Cvss3x, error) {
     start := time.Now()
     defer func() {
-        duration := time.Since(start)
-        log.Printf("Parse took: %v", duration)
+        log.Printf("Parse took: %v", time.Since(start))
     }()
-    
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, err := parser.Parse()
-    
+
+    cv, err := parser.ParseString(vectorStr)
     if err != nil {
         log.Printf("Parse failed '%s': %v", vectorStr, err)
         return nil, err
     }
-    
     log.Printf("Parse successful '%s'", vectorStr)
-    return vector, nil
+    return cv, nil
 }
 ```
 

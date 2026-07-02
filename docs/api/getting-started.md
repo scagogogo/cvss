@@ -204,20 +204,23 @@ if err != nil {
 
 ## Error Handling
 
-CVSS Skills provides detailed error information:
+CVSS Skills surfaces parse errors as sentinels or `fmt.Errorf`, and validation errors as `cvss.ValidationErrors`:
 
 ```go
-vector, err := parser.Parse()
+cv, err := parser.ParseString(vectorStr)
 if err != nil {
-    switch e := err.(type) {
-    case *parser.ParseError:
-        fmt.Printf("Parse error: %s\n", e.Error())
-        fmt.Printf("Error position: %d\n", e.Position)
-    case *parser.ValidationError:
-        fmt.Printf("Validation error: %s\n", e.Error())
-        fmt.Printf("Invalid metric: %s\n", e.Metric)
-    default:
-        fmt.Printf("Unknown error: %v\n", err)
+    if errors.Is(err, parser.ErrParserMagicHead) {
+        fmt.Printf("Not a CVSS vector (missing 'CVSS:' prefix)\n")
+    }
+    log.Fatal(err)
+}
+
+// Completeness is checked separately from parsing
+if err := cv.Validate(); err != nil {
+    if ve, ok := err.(cvss.ValidationErrors); ok {
+        for _, m := range ve.MissingMetrics() {
+            fmt.Printf("Missing metric: %s\n", m)
+        }
     }
 }
 ```
@@ -242,14 +245,17 @@ fmt.Printf("Score %.1f corresponds to severity: %s\n", score, severity) // High
 
 ## Performance Tips
 
-### 1. Reuse Parsers
+### 1. Use the Convenience Function
+
+`Cvss3xParser` binds its input string at construction and is not reusable — there is no `SetVector`. For one-shot parsing, use `parser.ParseString`, which constructs a fresh parser each call:
 
 ```go
-// Good practice: reuse parser
-parser := parser.NewCvss3xParser("")
+// Good practice: one-shot parse per vector
 for _, vectorStr := range vectors {
-    parser.SetVector(vectorStr)
-    vector, err := parser.Parse()
+    vector, err := parser.ParseString(vectorStr)
+    if err != nil {
+        continue
+    }
     // Process vector...
 }
 ```

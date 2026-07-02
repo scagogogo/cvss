@@ -1,42 +1,45 @@
-# Cvss3xParser 解析器
+# Cvss3xParser - CVSS 3.x 解析器
 
-`Cvss3xParser` 是专门用于解析 CVSS 3.x 向量字符串的解析器。它提供了灵活的解析选项、详细的错误处理和高性能的解析能力。
+`Cvss3xParser` 是专门用于解析 CVSS 3.x 向量字符串的解析器。字符串在构造时绑定，解析器通过 `Parse()` 一次性消费。
 
 ## 解析流程
 
-解析器按 `/` 切分字符串，先读版本前缀，再逐个处理 `KEY:VALUE` 指标段。严格模式决定如何对待未知/缺失指标：
+解析器读取 `CVSS:` 魔术头、版本号，再逐个处理 `/KEY:VALUE` 段。未知指标名和非法取值会作为错误返回，解析器不会静默丢弃：
 
 ```mermaid
 flowchart TD
-    In["CVSS:3.1/AV:N/AC:L/..."] --> Split["按 '/' 切分"]
-    Split --> Prefix{首段是否为<br/>CVSS:3.0 / 3.1?}
-    Prefix -->|否 & 严格| Err1["ParseError：<br/>缺失/非法前缀"]
-    Prefix -->|否 & 宽松| Assume["假定 3.1，继续"]
-    Prefix -->|是| Loop
-    Assume --> Loop
-    Loop["遍历每个 KEY:VALUE"] --> Known{已知指标<br/>且取值合法?}
-    Known -->|否 & 严格| Err2["ParseError：<br/>位置 + 原因"]
-    Known -->|否 & 宽松| Skip["跳过该段"]
+    In["CVSS:3.1/AV:N/AC:L/..."] --> Head{"以 'CVSS:' 开头?"}
+    Head -->|否| Err1["ErrParserMagicHead"]
+    Head -->|是| Ver{版本 3.0 / 3.1?}
+    Ver -->|否| ErrV["fmt.Errorf：<br/>不支持的版本"]
+    Ver -->|是| Loop
+    Loop["遍历每个 /KEY:VALUE"] --> Dup{已见过 KEY?}
+    Dup -->|是| ErrD["ErrDuplicateMetric"]
+    Dup -->|否| Known{GetVectorByShortName<br/>认识 KEY:VALUE?}
+    Known -->|否| Err2["fmt.Errorf：<br/>未知/非法值"]
     Known -->|是| Set["在 Cvss3x 上设置指标"]
-    Skip --> Loop
     Set --> Loop
-    Loop -->|结束| Complete{allowMissing<br/>或 8 个基础指标齐全?}
-    Complete -->|否| Err3["ValidationErrors：<br/>MissingMetrics()"]
-    Complete -->|是| Ok(["*cvss.Cvss3x"])
+    Loop -->|结束| Out(["*cvss.Cvss3x"])
+    Out --> Check{Check() / Validate()}
+    Check -->|缺少基础指标| Err3["cvss.ValidationErrors<br/>MissingMetrics()"]
 
     classDef err fill:#fff1f0,stroke:#ff4d4f,color:#a8071a;
-    class Err1,Err2,Err3 err;
+    class Err1,ErrV,ErrD,Err2,Err3 err;
 ```
+
+注意：`Parse()` 本身**不**强制完整性——即使缺少基础指标也会返回 `*Cvss3x`。如需强制必需基础指标，解析后调用 `Check()`（返回首个缺失指标）或 `Validate()`（返回 `cvss.ValidationErrors`，含全部缺失项）。
 
 ## 类型定义
 
+`Cvss3xParser` 持有输入字符串与解析游标，字段均为非导出；通过 `NewCvss3xParser` 构造、`Parse` 消费：
+
 ```go
 type Cvss3xParser struct {
-    vector      string
-    strictMode  bool
-    allowMissing bool
-    validator   func(metric, value string) error
+    // 非导出：输入字符串、rune 游标、已解析键集合、结果 *cvss.Cvss3x
 }
+
+func NewCvss3xParser(cvss3xStr string) *Cvss3xParser
+func (x *Cvss3xParser) Parse() (*cvss.Cvss3x, error)
 ```
 
 ## 创建解析器
@@ -44,433 +47,167 @@ type Cvss3xParser struct {
 ### NewCvss3xParser
 
 ```go
-func NewCvss3xParser(vector string) *Cvss3xParser
+func NewCvss3xParser(cvss3xStr string) *Cvss3xParser
 ```
 
-创建一个新的 CVSS 3.x 解析器实例。
+创建绑定到给定向量字符串的 CVSS 3.x 解析器。字符串会去除首尾空白。
 
 **参数：**
-- `vector`: 要解析的 CVSS 向量字符串
+- `cvss3xStr`: 要解析的 CVSS 向量字符串
 
 **返回值：**
 - `*Cvss3xParser`: 解析器实例
 
 **示例：**
 ```go
-parser := parser.NewCvss3xParser("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+p := parser.NewCvss3xParser("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
 ```
+
+::: warning 没有 SetVector —— 解析器不可重用
+输入字符串在构造时即固定，没有 `SetVector` 方法可重新绑定。如需解析另一个向量，请构造新的解析器（开销很小）或使用 `parser.ParseString` 便捷函数。
+:::
 
 ## 主要方法
 
 ### Parse
 
 ```go
-func (p *Cvss3xParser) Parse() (*cvss.Cvss3x, error)
+func (x *Cvss3xParser) Parse() (*cvss.Cvss3x, error)
 ```
 
-解析 CVSS 向量字符串并返回结构化的 CVSS 对象。
+解析绑定的向量字符串并返回结构化的 `*cvss.Cvss3x`。对于非法魔术头、不支持的版本、重复指标键、未知指标名或非法指标值，返回错误。
 
 **返回值：**
-- `*cvss.Cvss3x`: 解析后的 CVSS 向量对象
-- `error`: 解析错误
+- `*cvss.Cvss3x`: 解析后的 CVSS 向量对象（错误为 nil 时必然非 nil）
+- `error`: 解析错误——哨兵错误（`ErrParserMagicHead`、`ErrDuplicateMetric`）或描述问题的 `fmt.Errorf`
 
 **示例：**
 ```go
-vector, err := parser.Parse()
+vector, err := p.Parse()
 if err != nil {
     log.Fatalf("解析失败: %v", err)
 }
-
 fmt.Printf("解析成功: %s\n", vector.String())
 ```
 
-### SetVector
+## 便捷函数
+
+`parser` 包提供一行简写，内部各自构造新的解析器，部分还会一步完成验证或评分：
+
+| 函数 | 签名 | 行为 |
+|------|------|------|
+| `ParseString` | `(str string) (*cvss.Cvss3x, error)` | `NewCvss3xParser(str).Parse()` |
+| `MustParse` | `(str string) *cvss.Cvss3x` | 同 `ParseString`，但出错时 panic |
+| `ParseRelaxed` | `(str, defaultVersion string) (*cvss.Cvss3x, error)` | 接受不带 `CVSS:3.1/` 前缀的字符串；自动补 `CVSS:<defaultVersion>/`（默认 `"3.1"`） |
+| `ParseAndValidate` | `(str string) (*cvss.Cvss3x, error)` | 解析后 `Validate()`——缺少基础指标则失败 |
+| `ParseAndScore` | `(str string) (*cvss.Cvss3x, float64, cvss.Severity, error)` | 解析并计算基础评分与严重性 |
 
 ```go
-func (p *Cvss3xParser) SetVector(vector string)
+// 一行解析
+cv, err := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+
+// 无前缀输入
+cv, err := parser.ParseRelaxed("AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "3.1")
+
+// 解析 + 验证（拒绝不完整向量）
+cv, err := parser.ParseAndValidate("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+
+// 解析 + 评分
+cv, score, severity, err := parser.ParseAndScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
 ```
-
-设置要解析的向量字符串。用于重用解析器实例。
-
-**参数：**
-- `vector`: 新的 CVSS 向量字符串
-
-**示例：**
-```go
-parser := parser.NewCvss3xParser("")
-
-vectors := []string{
-    "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-    "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:L",
-}
-
-for _, vectorStr := range vectors {
-    parser.SetVector(vectorStr)
-    vector, err := parser.Parse()
-    if err != nil {
-        continue
-    }
-    
-    // 处理向量...
-}
-```
-
-### SetStrictMode
-
-```go
-func (p *Cvss3xParser) SetStrictMode(strict bool)
-```
-
-设置解析器的严格模式。
-
-**参数：**
-- `strict`: 是否启用严格模式
-
-**严格模式特性：**
-- 严格验证向量格式
-- 不允许未知的指标
-- 要求所有必需指标存在
-- 严格的值验证
-
-**示例：**
-```go
-parser := parser.NewCvss3xParser(vectorStr)
-parser.SetStrictMode(true) // 启用严格模式
-
-vector, err := parser.Parse()
-```
-
-### SetAllowMissingMetrics
-
-```go
-func (p *Cvss3xParser) SetAllowMissingMetrics(allow bool)
-```
-
-设置是否允许缺少某些指标。
-
-**参数：**
-- `allow`: 是否允许缺少指标
-
-**示例：**
-```go
-parser := parser.NewCvss3xParser(vectorStr)
-parser.SetAllowMissingMetrics(true) // 允许缺少某些指标
-
-vector, err := parser.Parse()
-```
-
-### SetCustomValidator
-
-```go
-func (p *Cvss3xParser) SetCustomValidator(validator func(metric, value string) error)
-```
-
-设置自定义验证函数。
-
-**参数：**
-- `validator`: 自定义验证函数
-
-**示例：**
-```go
-parser := parser.NewCvss3xParser(vectorStr)
-parser.SetCustomValidator(func(metric, value string) error {
-    // 自定义验证逻辑
-    if metric == "AV" && value == "X" {
-        return fmt.Errorf("不支持的攻击向量值: %s", value)
-    }
-    return nil
-})
-
-vector, err := parser.Parse()
-```
-
-## 解析过程
-
-### 1. 词法分析
-
-解析器首先将向量字符串分解为标记：
-
-```
-CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
-```
-
-分解为：
-- 版本: `CVSS:3.1`
-- 指标: `AV:N`, `AC:L`, `PR:N`, 等
-
-### 2. 语法分析
-
-验证向量的语法结构：
-- 检查版本格式
-- 验证指标格式
-- 确保分隔符正确
-
-### 3. 语义验证
-
-验证指标的语义正确性：
-- 检查指标名称的有效性
-- 验证指标值的合法性
-- 确保必需指标存在
-
-### 4. 对象构建
-
-根据解析结果构建 CVSS 对象：
-- 创建相应的向量对象
-- 设置指标值
-- 建立对象关系
 
 ## 错误处理
 
-### 错误类型
+`Parse` 返回两类错误之一：
 
-#### ParseError
+### 哨兵错误
 
 ```go
-type ParseError struct {
-    Message  string
-    Position int
-    Input    string
-}
+var ErrParserMagicHead = errors.New("cvss 3.x parser error: invalid magic head, it must equal 'CVSS'")
+var ErrDuplicateMetric = errors.New("cvss 3.x parser error: duplicate metric key")
 ```
 
-表示解析过程中的错误。
+用 `errors.Is` 检测：
 
-**示例：**
 ```go
-vector, err := parser.Parse()
+vector, err := p.Parse()
 if err != nil {
-    if parseErr, ok := err.(*parser.ParseError); ok {
-        fmt.Printf("解析错误: %s\n", parseErr.Message)
-        fmt.Printf("错误位置: %d\n", parseErr.Position)
-        fmt.Printf("输入内容: %s\n", parseErr.Input)
+    if errors.Is(err, parser.ErrParserMagicHead) {
+        log.Fatal("输入不是 CVSS 向量（缺少 'CVSS:' 前缀）")
     }
+    if errors.Is(err, parser.ErrDuplicateMetric) {
+        log.Fatalf("重复指标: %v", err)
+    }
+    // 否则是描述不支持版本、未知指标名或非法值的 fmt.Errorf
+    log.Fatal(err)
 }
 ```
 
-#### ValidationError
+### 解析后的验证错误
+
+完整性由 `cvss` 包检查，而非解析器：
 
 ```go
-type ValidationError struct {
-    Message string
-    Metric  string
-    Value   string
-}
-```
-
-表示验证过程中的错误。
-
-**示例：**
-```go
-vector, err := parser.Parse()
+cv, err := parser.ParseString(vectorStr)
 if err != nil {
-    if valErr, ok := err.(*parser.ValidationError); ok {
-        fmt.Printf("验证错误: %s\n", valErr.Message)
-        fmt.Printf("问题指标: %s\n", valErr.Metric)
-        fmt.Printf("问题值: %s\n", valErr.Value)
-    }
+    return err
 }
-```
-
-### 错误处理最佳实践
-
-```go
-func parseWithErrorHandling(vectorStr string) (*cvss.Cvss3x, error) {
-    parser := parser.NewCvss3xParser(vectorStr)
-    
-    vector, err := parser.Parse()
-    if err != nil {
-        switch e := err.(type) {
-        case *parser.ParseError:
-            return nil, fmt.Errorf("解析错误在位置 %d: %s", e.Position, e.Message)
-        case *parser.ValidationError:
-            return nil, fmt.Errorf("验证错误 - 指标 %s 值 %s: %s", e.Metric, e.Value, e.Message)
-        default:
-            return nil, fmt.Errorf("未知解析错误: %w", err)
+if err := cv.Validate(); err != nil {
+    if ve, ok := err.(cvss.ValidationErrors); ok {
+        for _, m := range ve.MissingMetrics() {
+            fmt.Printf("缺少指标: %s\n", m)
         }
     }
-    
-    return vector, nil
 }
 ```
 
-## 使用示例
+## 批量操作
 
-### 基本解析
+并发解析多个向量时，使用包级别的批量辅助函数：
 
 ```go
-package main
+type BatchParseResult struct {
+    Index  int          // 原始输入索引
+    Vector *cvss.Cvss3x // 失败时为 nil
+    Error  error        // 成功时为 nil
+}
 
-import (
-    "fmt"
-    "log"
-    
-    "github.com/scagogogo/cvss-skills/pkg/parser"
-)
+func BatchParse(vectors []string, workerCount int) []BatchParseResult
 
-func main() {
-    vectorStr := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-    
-    // 创建解析器
-    parser := parser.NewCvss3xParser(vectorStr)
-    
-    // 解析向量
-    vector, err := parser.Parse()
-    if err != nil {
-        log.Fatalf("解析失败: %v", err)
+type BatchValidateResult struct {
+    Index  int
+    Vector *cvss.Cvss3x
+    Valid  bool
+    Errors []string
+    Error  error
+}
+
+func BatchValidate(vectors []string, workerCount int) []BatchValidateResult
+```
+
+`workerCount <= 0` 时使用 `len(vectors)` 个 worker。结果按输入顺序返回。
+
+```go
+results := parser.BatchParse([]string{
+    "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+    "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:C/C:L/I:L/A:N",
+    "not-a-vector",
+}, 4)
+for _, r := range results {
+    if r.Error != nil {
+        fmt.Printf("索引 %d 失败: %v\n", r.Index, r.Error)
+        continue
     }
-    
-    // 输出结果
-    fmt.Printf("原始向量: %s\n", vectorStr)
-    fmt.Printf("解析结果: %s\n", vector.String())
-    fmt.Printf("版本: %d.%d\n", vector.MajorVersion, vector.MinorVersion)
-}
-```
-
-### 批量解析
-
-```go
-func parseBatch(vectors []string) {
-    parser := parser.NewCvss3xParser("")
-    
-    for i, vectorStr := range vectors {
-        parser.SetVector(vectorStr)
-        
-        vector, err := parser.Parse()
-        if err != nil {
-            fmt.Printf("向量 %d 解析失败: %v\n", i+1, err)
-            continue
-        }
-        
-        fmt.Printf("向量 %d: %s -> 解析成功\n", i+1, vectorStr)
-    }
-}
-```
-
-### 容错解析
-
-```go
-func tolerantParsing(vectorStr string) (*cvss.Cvss3x, error) {
-    parser := parser.NewCvss3xParser(vectorStr)
-    
-    // 启用容错模式
-    parser.SetStrictMode(false)
-    parser.SetAllowMissingMetrics(true)
-    
-    // 设置自定义验证器
-    parser.SetCustomValidator(func(metric, value string) error {
-        // 允许某些非标准值
-        if metric == "AV" && value == "X" {
-            return nil // 忽略未知值
-        }
-        return nil
-    })
-    
-    return parser.Parse()
-}
-```
-
-### 严格解析
-
-```go
-func strictParsing(vectorStr string) (*cvss.Cvss3x, error) {
-    parser := parser.NewCvss3xParser(vectorStr)
-    
-    // 启用严格模式
-    parser.SetStrictMode(true)
-    parser.SetAllowMissingMetrics(false)
-    
-    // 设置严格的自定义验证器
-    parser.SetCustomValidator(func(metric, value string) error {
-        // 额外的验证逻辑
-        if metric == "AV" && value == "N" {
-            // 检查网络攻击向量的额外条件
-            return nil
-        }
-        return nil
-    })
-    
-    return parser.Parse()
-}
-```
-
-## 性能优化
-
-### 重用解析器
-
-```go
-type VectorProcessor struct {
-    parser *parser.Cvss3xParser
-}
-
-func NewVectorProcessor() *VectorProcessor {
-    return &VectorProcessor{
-        parser: parser.NewCvss3xParser(""),
-    }
-}
-
-func (vp *VectorProcessor) ProcessVector(vectorStr string) (*cvss.Cvss3x, error) {
-    vp.parser.SetVector(vectorStr)
-    return vp.parser.Parse()
-}
-```
-
-### 并发解析
-
-```go
-func parseVectorsConcurrently(vectors []string) []*cvss.Cvss3x {
-    results := make([]*cvss.Cvss3x, len(vectors))
-    var wg sync.WaitGroup
-    
-    for i, vectorStr := range vectors {
-        wg.Add(1)
-        go func(index int, vector string) {
-            defer wg.Done()
-            
-            parser := parser.NewCvss3xParser(vector)
-            result, err := parser.Parse()
-            if err != nil {
-                results[index] = nil
-                return
-            }
-            
-            results[index] = result
-        }(i, vectorStr)
-    }
-    
-    wg.Wait()
-    return results
-}
-```
-
-### 对象池
-
-```go
-var parserPool = sync.Pool{
-    New: func() interface{} {
-        return parser.NewCvss3xParser("")
-    },
-}
-
-func parseWithPool(vectorStr string) (*cvss.Cvss3x, error) {
-    parser := parserPool.Get().(*parser.Cvss3xParser)
-    defer parserPool.Put(parser)
-    
-    parser.SetVector(vectorStr)
-    return parser.Parse()
+    fmt.Printf("索引 %d: %s\n", r.Index, r.Vector.String())
 }
 ```
 
 ## 支持的向量格式
 
-### CVSS 3.0
+### CVSS 3.0 / 3.1
 
 ```
 CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
-```
-
-### CVSS 3.1
-
-```
 CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
 ```
 
@@ -483,8 +220,109 @@ CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:F/RL:O/RC:C
 ### 包含环境指标
 
 ```
-CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/CR:H/IR:H/AR:H
+CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/CR:H/IR:H/AR:H/MAV:L
 ```
+
+## 使用示例
+
+### 基本解析
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/scagogogo/cvss-skills/pkg/parser"
+)
+
+func main() {
+    vectorStr := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+
+    p := parser.NewCvss3xParser(vectorStr)
+    vector, err := p.Parse()
+    if err != nil {
+        log.Fatalf("解析失败: %v", err)
+    }
+
+    fmt.Printf("原始向量: %s\n", vectorStr)
+    fmt.Printf("解析结果: %s\n", vector.String())
+    fmt.Printf("版本:     %d.%d\n", vector.MajorVersion, vector.MinorVersion)
+}
+```
+
+### 批量解析
+
+```go
+func parseBatch(vectors []string) {
+    results := parser.BatchParse(vectors, 4)
+    for _, r := range results {
+        if r.Error != nil {
+            fmt.Printf("向量 %d 解析失败: %v\n", r.Index+1, r.Error)
+            continue
+        }
+        fmt.Printf("向量 %d: %s -> 解析成功\n", r.Index+1, r.Vector.String())
+    }
+}
+```
+
+### 容错解析（无前缀）
+
+当输入可能缺少 `CVSS:3.1/` 前缀时，使用 `ParseRelaxed`：
+
+```go
+// 接受 "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" —— 假定为 3.1
+cv, err := parser.ParseRelaxed("AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "3.1")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(cv.String()) // CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+```
+
+### 解析并验证（拒绝不完整向量）
+
+```go
+cv, err := parser.ParseAndValidate("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U")
+if err != nil {
+    // 可能是解析错误，也可能是列出缺失指标的 cvss.ValidationErrors
+    log.Fatal(err)
+}
+fmt.Println(cv.String())
+```
+
+## 性能优化
+
+### 并发解析
+
+`Cvss3xParser` 持有可变游标状态，**不可**跨 goroutine 共享同一实例。每个向量构造新的解析器（或使用 `BatchParse`，它已为你处理）：
+
+```go
+func parseVectorsConcurrently(vectors []string) []*cvss.Cvss3x {
+    results := make([]*cvss.Cvss3x, len(vectors))
+    var wg sync.WaitGroup
+
+    for i, vectorStr := range vectors {
+        wg.Add(1)
+        go func(index int, s string) {
+            defer wg.Done()
+            cv, err := parser.ParseString(s) // 每个 goroutine 用新解析器
+            if err != nil {
+                results[index] = nil
+                return
+            }
+            results[index] = cv
+        }(i, vectorStr)
+    }
+
+    wg.Wait()
+    return results
+}
+```
+
+::: warning 不要用对象池复用解析器
+通过 `sync.Pool` 复用 `*Cvss3xParser` 并配合不存在的 `SetVector` 来重设输入字符串是不支持的——输入字符串在构造时即固定。池化普通字符串并调用 `ParseString` 没问题；池化解析器对象则不行。
+:::
 
 ## 最佳实践
 
@@ -495,56 +333,33 @@ func validateInput(vectorStr string) error {
     if vectorStr == "" {
         return fmt.Errorf("向量字符串不能为空")
     }
-    
-    if !strings.HasPrefix(vectorStr, "CVSS:") {
-        return fmt.Errorf("无效的向量格式")
+    if len(vectorStr) > 1000 {
+        return fmt.Errorf("向量字符串过长")
     }
-    
+    if !strings.HasPrefix(strings.ToUpper(vectorStr), "CVSS:") {
+        // ParseRelaxed 可处理无前缀输入；否则视为错误
+        return fmt.Errorf("无效的向量格式（缺少 'CVSS:' 前缀）")
+    }
     return nil
 }
 ```
 
-### 2. 错误恢复
-
-```go
-func parseWithRecovery(vectorStr string) (*cvss.Cvss3x, error) {
-    // 首先尝试严格解析
-    parser := parser.NewCvss3xParser(vectorStr)
-    parser.SetStrictMode(true)
-    
-    vector, err := parser.Parse()
-    if err == nil {
-        return vector, nil
-    }
-    
-    // 如果失败，尝试容错解析
-    parser.SetStrictMode(false)
-    parser.SetAllowMissingMetrics(true)
-    
-    return parser.Parse()
-}
-```
-
-### 3. 日志记录
+### 2. 日志记录
 
 ```go
 func parseWithLogging(vectorStr string) (*cvss.Cvss3x, error) {
     start := time.Now()
     defer func() {
-        duration := time.Since(start)
-        log.Printf("解析耗时: %v", duration)
+        log.Printf("解析耗时: %v", time.Since(start))
     }()
-    
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, err := parser.Parse()
-    
+
+    cv, err := parser.ParseString(vectorStr)
     if err != nil {
         log.Printf("解析失败 '%s': %v", vectorStr, err)
         return nil, err
     }
-    
     log.Printf("解析成功 '%s'", vectorStr)
-    return vector, nil
+    return cv, nil
 }
 ```
 
