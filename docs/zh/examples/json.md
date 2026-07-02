@@ -88,12 +88,12 @@ func enrichedJSON(vector *cvss.Cvss3x) {
     }{
         Vector:    vector,
         Score:     score,
-        Severity:  calculator.GetSeverityRating(score),
+        Severity:  calculator.GetSeverityRating(score).String(),
         Timestamp: time.Now().Format(time.RFC3339),
     }
 
-    enriched.Metadata.HasTemporal = vector.HasTemporal()
-    enriched.Metadata.HasEnvironmental = vector.HasEnvironmental()
+    enriched.Metadata.HasTemporal = vector.HasTemporalMetrics()
+    enriched.Metadata.HasEnvironmental = vector.HasEnvironmentalMetrics()
     enriched.Metadata.MetricCount = countMetrics(vector)
 
     jsonData, err := json.MarshalIndent(enriched, "", "  ")
@@ -107,10 +107,10 @@ func enrichedJSON(vector *cvss.Cvss3x) {
 
 func countMetrics(vector *cvss.Cvss3x) int {
     count := 8 // 基础指标
-    if vector.HasTemporal() {
+    if vector.HasTemporalMetrics() {
         count += 3
     }
-    if vector.HasEnvironmental() {
+    if vector.HasEnvironmentalMetrics() {
         count += 11
     }
     return count
@@ -129,9 +129,9 @@ func loadFromJSON(jsonData []byte) (*cvss.Cvss3x, error) {
         return nil, fmt.Errorf("JSON 解组失败: %w", err)
     }
 
-    // 验证加载的向量
-    if !vector.IsValid() {
-        return nil, fmt.Errorf("加载的向量无效")
+    // 验证加载的向量（Check 返回第一个缺失/无效指标）
+    if err := vector.Check(); err != nil {
+        return nil, fmt.Errorf("加载的向量无效: %w", err)
     }
 
     return &vector, nil
@@ -205,7 +205,7 @@ func saveToFile(vector *cvss.Cvss3x, filename string) error {
         return fmt.Errorf("JSON 编组失败: %w", err)
     }
 
-    err = ioutil.WriteFile(filename, jsonData, 0644)
+    err = os.WriteFile(filename, jsonData, 0644)
     if err != nil {
         return fmt.Errorf("文件写入失败: %w", err)
     }
@@ -219,7 +219,7 @@ func saveToFile(vector *cvss.Cvss3x, filename string) error {
 
 ```go
 func loadFromFile(filename string) (*cvss.Cvss3x, error) {
-    jsonData, err := ioutil.ReadFile(filename)
+    jsonData, err := os.ReadFile(filename)
     if err != nil {
         return nil, fmt.Errorf("文件读取失败: %w", err)
     }
@@ -291,9 +291,9 @@ func exportSimplified(vector *cvss.Cvss3x) ([]byte, error) {
 
     simplified := SimplifiedVector{
         Vector:   vector.String(),
-        Version:  vector.GetVersion(),
+        Version:  vector.Version(),
         Score:    score,
-        Severity: calculator.GetSeverityRating(score),
+        Severity: calculator.GetSeverityRating(score).String(),
     }
 
     return json.MarshalIndent(simplified, "", "  ")
@@ -327,7 +327,7 @@ type VectorAnalysis struct {
 func exportDetailedAnalysis(vector *cvss.Cvss3x) ([]byte, error) {
     calculator := cvss.NewCalculator(vector)
     
-    baseScore, _ := calculator.CalculateBaseScore()
+    baseScore, _ := calculator.GetBaseScore()
     finalScore, _ := calculator.Calculate()
     
     analysis := DetailedAnalysis{
@@ -337,7 +337,7 @@ func exportDetailedAnalysis(vector *cvss.Cvss3x) ([]byte, error) {
             Final: finalScore,
         },
         Analysis: VectorAnalysis{
-            Severity:      calculator.GetSeverityRating(finalScore),
+            Severity:      calculator.GetSeverityRating(finalScore).String(),
             RiskFactors:   analyzeRiskFactors(vector),
             Recommendations: generateRecommendations(vector),
             MetricSummary: summarizeMetrics(vector),
@@ -346,14 +346,14 @@ func exportDetailedAnalysis(vector *cvss.Cvss3x) ([]byte, error) {
     }
 
     // 如果存在时间分数，添加时间分数
-    if vector.HasTemporal() {
-        temporalScore, _ := calculator.CalculateTemporalScore()
+    if vector.HasTemporalMetrics() {
+        temporalScore, _ := calculator.GetTemporalScore()
         analysis.Scores.Temporal = temporalScore
     }
 
     // 如果存在环境分数，添加环境分数
-    if vector.HasEnvironmental() {
-        envScore, _ := calculator.CalculateEnvironmentalScore()
+    if vector.HasEnvironmentalMetrics() {
+        envScore, _ := calculator.GetEnvironmentalScore()
         analysis.Scores.Environmental = envScore
     }
 
@@ -435,8 +435,7 @@ func handleVectorAnalysis(w http.ResponseWriter, r *http.Request) {
         }
 
         // 解析向量
-        parser := parser.NewCvss3xParser(request.Vector)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(request.Vector)
         if err != nil {
             http.Error(w, fmt.Sprintf("解析错误: %v", err), http.StatusBadRequest)
             return
@@ -489,8 +488,7 @@ func handleBatchAnalysis(w http.ResponseWriter, r *http.Request) {
             "vector": vectorStr,
         }
 
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             result["error"] = err.Error()
             results = append(results, result)
@@ -503,11 +501,11 @@ func handleBatchAnalysis(w http.ResponseWriter, r *http.Request) {
         switch request.Format {
         case "simplified":
             result["score"] = score
-            result["severity"] = calculator.GetSeverityRating(score)
+            result["severity"] = calculator.GetSeverityRating(score).String()
         default:
             result["parsed"] = vector
             result["score"] = score
-            result["severity"] = calculator.GetSeverityRating(score)
+            result["severity"] = calculator.GetSeverityRating(score).String()
         }
 
         results = append(results, result)
@@ -553,7 +551,7 @@ func saveVectorToDB(db *sql.DB, vector *cvss.Cvss3x) error {
     _, err = db.Exec(query,
         vector.String(),
         score,
-        calculator.GetSeverityRating(score),
+        calculator.GetSeverityRating(score).String(),
         string(jsonData),
         time.Now(),
     )
@@ -590,7 +588,7 @@ func saveVectorToMongo(collection *mongo.Collection, vector *cvss.Cvss3x) error 
     }{
         VectorString: vector.String(),
         Score:        score,
-        Severity:     calculator.GetSeverityRating(score),
+        Severity:     calculator.GetSeverityRating(score).String(),
         Vector:       vector,
         CreatedAt:    time.Now(),
     }

@@ -88,12 +88,12 @@ func enrichedJSON(vector *cvss.Cvss3x) {
     }{
         Vector:    vector,
         Score:     score,
-        Severity:  calculator.GetSeverityRating(score),
+        Severity:  calculator.GetSeverityRating(score).String(),
         Timestamp: time.Now().Format(time.RFC3339),
     }
 
-    enriched.Metadata.HasTemporal = vector.HasTemporal()
-    enriched.Metadata.HasEnvironmental = vector.HasEnvironmental()
+    enriched.Metadata.HasTemporal = vector.HasTemporalMetrics()
+    enriched.Metadata.HasEnvironmental = vector.HasEnvironmentalMetrics()
     enriched.Metadata.MetricCount = countMetrics(vector)
 
     jsonData, err := json.MarshalIndent(enriched, "", "  ")
@@ -107,10 +107,10 @@ func enrichedJSON(vector *cvss.Cvss3x) {
 
 func countMetrics(vector *cvss.Cvss3x) int {
     count := 8 // Base metrics
-    if vector.HasTemporal() {
+    if vector.HasTemporalMetrics() {
         count += 3
     }
-    if vector.HasEnvironmental() {
+    if vector.HasEnvironmentalMetrics() {
         count += 11
     }
     return count
@@ -129,9 +129,9 @@ func loadFromJSON(jsonData []byte) (*cvss.Cvss3x, error) {
         return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
     }
 
-    // Validate loaded vector
-    if !vector.IsValid() {
-        return nil, fmt.Errorf("loaded vector is invalid")
+    // Validate loaded vector (Check returns the first missing/invalid metric)
+    if err := vector.Check(); err != nil {
+        return nil, fmt.Errorf("loaded vector is invalid: %w", err)
     }
 
     return &vector, nil
@@ -205,7 +205,7 @@ func saveToFile(vector *cvss.Cvss3x, filename string) error {
         return fmt.Errorf("JSON marshal failed: %w", err)
     }
 
-    err = ioutil.WriteFile(filename, jsonData, 0644)
+    err = os.WriteFile(filename, jsonData, 0644)
     if err != nil {
         return fmt.Errorf("file write failed: %w", err)
     }
@@ -219,7 +219,7 @@ func saveToFile(vector *cvss.Cvss3x, filename string) error {
 
 ```go
 func loadFromFile(filename string) (*cvss.Cvss3x, error) {
-    jsonData, err := ioutil.ReadFile(filename)
+    jsonData, err := os.ReadFile(filename)
     if err != nil {
         return nil, fmt.Errorf("file read failed: %w", err)
     }
@@ -291,9 +291,9 @@ func exportSimplified(vector *cvss.Cvss3x) ([]byte, error) {
 
     simplified := SimplifiedVector{
         Vector:   vector.String(),
-        Version:  vector.GetVersion(),
+        Version:  vector.Version(),
         Score:    score,
-        Severity: calculator.GetSeverityRating(score),
+        Severity: calculator.GetSeverityRating(score).String(),
     }
 
     return json.MarshalIndent(simplified, "", "  ")
@@ -327,7 +327,7 @@ type VectorAnalysis struct {
 func exportDetailedAnalysis(vector *cvss.Cvss3x) ([]byte, error) {
     calculator := cvss.NewCalculator(vector)
     
-    baseScore, _ := calculator.CalculateBaseScore()
+    baseScore, _ := calculator.GetBaseScore()
     finalScore, _ := calculator.Calculate()
     
     analysis := DetailedAnalysis{
@@ -337,7 +337,7 @@ func exportDetailedAnalysis(vector *cvss.Cvss3x) ([]byte, error) {
             Final: finalScore,
         },
         Analysis: VectorAnalysis{
-            Severity:      calculator.GetSeverityRating(finalScore),
+            Severity:      calculator.GetSeverityRating(finalScore).String(),
             RiskFactors:   analyzeRiskFactors(vector),
             Recommendations: generateRecommendations(vector),
             MetricSummary: summarizeMetrics(vector),
@@ -346,14 +346,14 @@ func exportDetailedAnalysis(vector *cvss.Cvss3x) ([]byte, error) {
     }
 
     // Add temporal score if present
-    if vector.HasTemporal() {
-        temporalScore, _ := calculator.CalculateTemporalScore()
+    if vector.HasTemporalMetrics() {
+        temporalScore, _ := calculator.GetTemporalScore()
         analysis.Scores.Temporal = temporalScore
     }
 
     // Add environmental score if present
-    if vector.HasEnvironmental() {
-        envScore, _ := calculator.CalculateEnvironmentalScore()
+    if vector.HasEnvironmentalMetrics() {
+        envScore, _ := calculator.GetEnvironmentalScore()
         analysis.Scores.Environmental = envScore
     }
 
@@ -435,8 +435,7 @@ func handleVectorAnalysis(w http.ResponseWriter, r *http.Request) {
         }
 
         // Parse vector
-        parser := parser.NewCvss3xParser(request.Vector)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(request.Vector)
         if err != nil {
             http.Error(w, fmt.Sprintf("Parse error: %v", err), http.StatusBadRequest)
             return
@@ -489,8 +488,7 @@ func handleBatchAnalysis(w http.ResponseWriter, r *http.Request) {
             "vector": vectorStr,
         }
 
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             result["error"] = err.Error()
             results = append(results, result)
