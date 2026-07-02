@@ -205,13 +205,13 @@ log.Printf("计算耗时: %v", duration)
 - **[快速开始](/zh/api/getting-started)** - 5分钟上手指南
 - **[CVSS 包详解](/zh/api/cvss/)** - 核心功能深入了解
 - **[示例代码](/zh/examples/)** - 实际使用示例
-- **[最佳实践](/zh/api/best-practices)** - 生产环境建议
+- **[最佳实践](/zh/api/getting-started)** - 生产环境建议
 
 ## 获取帮助
 
 如果你在使用 API 时遇到问题：
 
-1. 查看 [常见问题](/zh/api/faq)
+1. 查看 [常见问题](/zh/api/getting-started)
 2. 浏览 [示例代码](/zh/examples/)
 3. 在 [GitHub](https://github.com/scagogogo/cvss-skills/issues) 上提交问题
 4. 参与 [社区讨论](https://github.com/scagogogo/cvss-skills/discussions)

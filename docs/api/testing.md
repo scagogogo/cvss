@@ -748,4 +748,4 @@ After implementing comprehensive testing:
 
 - [Error Handling](/api/error-handling) - Error handling patterns
 - [Performance Guide](/api/performance) - Performance optimization
-- [Security Guide](/api/security) - Security best practices
+- [Security Guide](/examples/security) - Security best practices

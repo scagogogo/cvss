@@ -573,12 +573,12 @@ func TestMemoryStress(t *testing.T) {
 
 优化性能后，您可以探索：
 
-- [生产部署](/zh/examples/production) - 企业部署模式
+- [生产部署](/zh/examples/edge-cases) - 企业部署模式
 - [监控和告警](/zh/examples/monitoring) - 生产监控
-- [测试指南](/zh/api/testing) - 全面的测试策略
+- [测试指南](/zh/api/cvss/) - 全面的测试策略
 
 ## 相关文档
 
-- [基准测试指南](/zh/api/performance) - 详细的性能分析
-- [内存管理](/zh/api/memory) - 高级内存优化
-- [并发编程](/zh/api/concurrency) - Go 并发模式
+- [基准测试指南](/zh/examples/performance) - 详细的性能分析
+- [内存管理](/zh/api/cvss/calculator) - 高级内存优化
+- [并发编程](/zh/api/cvss/calculator) - Go 并发模式

@@ -741,6 +741,6 @@ After mastering environmental metrics, you can explore:
 
 ## Related Documentation
 
-- [Environmental Metrics API](/api/cvss/environmental) - Detailed API reference
+- [Environmental Metrics API](/api/cvss/calculator) - Detailed API reference
 - [CVSS Specification](https://www.first.org/cvss/) - Official CVSS documentation
 - [Risk Assessment Guide](/examples/risk-assessment) - Comprehensive risk assessment examples

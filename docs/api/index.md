@@ -223,13 +223,13 @@ log.Printf("Calculation took: %v", duration)
 - **[Getting Started](/api/getting-started)** - 5-minute quick start guide
 - **[CVSS Package Deep Dive](/api/cvss/)** - Core functionality overview
 - **[Example Code](/examples/)** - Practical usage examples
-- **[Best Practices](/api/best-practices)** - Production environment recommendations
+- **[Best Practices](/api/getting-started)** - Production environment recommendations
 
 ## Getting Help
 
 If you encounter issues while using the API:
 
-1. Check the [FAQ](/api/faq)
+1. Check the [FAQ](/api/getting-started)
 2. Browse [Example Code](/examples/)
 3. Submit issues on [GitHub](https://github.com/scagogogo/cvss-skills/issues)
 4. Join [Community Discussions](https://github.com/scagogogo/cvss-skills/discussions)

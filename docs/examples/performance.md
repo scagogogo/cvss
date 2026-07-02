@@ -580,5 +580,5 @@ After optimizing performance, you can explore:
 ## Related Documentation
 
 - [Benchmarking Guide](/api/performance) - Detailed performance analysis
-- [Memory Management](/api/memory) - Advanced memory optimization
-- [Concurrent Programming](/api/concurrency) - Go concurrency patterns
+- [Memory Management](/api/performance) - Advanced memory optimization
+- [Concurrent Programming](/api/performance) - Go concurrency patterns

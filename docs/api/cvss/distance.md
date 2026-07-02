@@ -598,4 +598,4 @@ func safeCalculateDistance(v1, v2 *cvss.Cvss3x) (float64, error) {
 - [Cvss3x Data Structure](/api/cvss/cvss3x)
 - [Calculator](/api/cvss/calculator)
 - [Usage Examples](/examples/distance)
-- [Clustering Examples](/examples/clustering)
+- [Clustering Examples](/examples/production)

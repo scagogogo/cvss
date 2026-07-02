@@ -581,9 +581,9 @@ func TestRiskAssessment(t *testing.T) {
 
 After implementing risk assessment, explore:
 
-- [Risk Management](/examples/risk-management) - Ongoing risk management processes
-- [Compliance Automation](/examples/compliance) - Automated compliance reporting
-- [Security Metrics](/examples/security-metrics) - Advanced security measurements
+- [Risk Management](/examples/risk-assessment) - Ongoing risk management processes
+- [Compliance Automation](/examples/security) - Automated compliance reporting
+- [Security Metrics](/examples/monitoring) - Advanced security measurements
 
 ## Related Documentation
 

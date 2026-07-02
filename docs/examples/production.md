@@ -618,6 +618,6 @@ After production deployment, consider:
 
 ## Related Documentation
 
-- [Configuration Reference](/api/configuration) - Complete configuration guide
-- [Deployment Patterns](/api/deployment) - Advanced deployment strategies
-- [Operations Guide](/api/operations) - Day-to-day operations
+- [Configuration Reference](/api/getting-started) - Complete configuration guide
+- [Deployment Patterns](/examples/production) - Advanced deployment strategies
+- [Operations Guide](/examples/production) - Day-to-day operations

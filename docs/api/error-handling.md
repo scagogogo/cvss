@@ -664,6 +664,6 @@ func TestErrorHandling(t *testing.T) {
 
 ## Related Documentation
 
-- [Validation Guide](/api/validation) - Input validation patterns
+- [Validation Guide](/api/error-handling) - Input validation patterns
 - [Testing Guide](/api/testing) - Error testing strategies
-- [Logging Guide](/api/logging) - Structured logging practices
+- [Logging Guide](/examples/monitoring) - Structured logging practices

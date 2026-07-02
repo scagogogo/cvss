@@ -642,4 +642,4 @@ func runParsingTests() {
 
 - [解析器 API 参考](/zh/api/parser/) - 详细解析器文档
 - [CVSS 数据结构](/zh/api/cvss/cvss3x) - 理解解析的数据
-- [错误处理指南](/zh/api/error-handling) - 全面的错误处理
+- [错误处理指南](/zh/api/cvss/) - 全面的错误处理

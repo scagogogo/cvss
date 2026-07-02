@@ -287,12 +287,12 @@ Now that you've mastered the basics, you can continue learning:
 1. **[Detailed API Documentation](/api/)** - Learn about all available APIs
 2. **[Example Code](/examples/)** - See more practical usage examples
 3. **[CVSS Package Deep Dive](/api/cvss/)** - Understand core functionality
-4. **[Best Practices](/api/best-practices)** - Production environment recommendations
+4. **[Best Practices](/api/getting-started)** - Production environment recommendations
 
 ## Getting Help
 
 If you encounter issues:
 
-- Check the [FAQ](/api/faq)
+- Check the [FAQ](/api/getting-started)
 - Browse [GitHub Issues](https://github.com/scagogogo/cvss-skills/issues)
 - Join [Community Discussions](https://github.com/scagogogo/cvss-skills/discussions)

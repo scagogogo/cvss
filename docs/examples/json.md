@@ -711,4 +711,4 @@ After mastering JSON operations, you can explore:
 
 - [JSON API Reference](/api/cvss/json) - Detailed JSON documentation
 - [CVSS Data Structures](/api/cvss/cvss3x) - Understanding data formats
-- [Database Integration Guide](/api/integration) - Production integration patterns
+- [Database Integration Guide](/api/getting-started) - Production integration patterns

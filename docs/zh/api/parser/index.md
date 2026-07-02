@@ -319,4 +319,4 @@ CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:F/RL:O/RC:C/CR:H/IR:H/AR:H/MAV:L/
 - [Cvss3xParser 详细文档](/zh/api/parser/cvss3x-parser)
 - [Cvss3x 数据结构](/zh/api/cvss/cvss3x)
 - [使用示例](/zh/examples/parsing)
-- [错误处理指南](/zh/api/error-handling)
+- [错误处理指南](/zh/api/cvss/)

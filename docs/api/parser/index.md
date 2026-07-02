@@ -13,7 +13,7 @@ import "github.com/scagogogo/cvss-skills/pkg/parser"
 | Type | Description | Documentation Link |
 |------|-------------|-------------------|
 | `Cvss3xParser` | CVSS 3.x vector string parser | [Detailed Documentation](/api/parser/cvss3x-parser) |
-| `VectorParser` | Generic vector parser interface | [Detailed Documentation](/api/parser/vector-parser) |
+| `VectorParser` | Generic vector parser interface | [Detailed Documentation](/api/parser/cvss3x-parser) |
 
 ## Quick Examples
 
@@ -281,5 +281,5 @@ parser/
 深入了解具体的解析器：
 
 - 📖 [Cvss3xParser 详细文档](/api/parser/cvss3x-parser)
-- 🔧 [VectorParser 接口](/api/parser/vector-parser)
+- 🔧 [VectorParser 接口](/api/parser/cvss3x-parser)
 - 💡 [解析示例](/examples/parsing)

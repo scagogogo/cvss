@@ -708,12 +708,12 @@ func (sm *SecurityMonitor) GetSecurityMetrics() map[string]int {
 
 After implementing security measures:
 
-- [Compliance Integration](/examples/compliance) - Regulatory compliance
-- [Incident Response](/examples/incident-response) - Security incident handling
-- [Security Metrics](/examples/security-metrics) - Security measurement
+- [Monitoring](/examples/monitoring) - Security monitoring integration
+- [Risk Assessment](/examples/risk-assessment) - Risk-level analysis
+- [Production](/examples/production) - Production hardening checklist
 
 ## Related Documentation
 
 - [Error Handling](/api/error-handling) - Secure error handling
-- [Authentication](/api/authentication) - Authentication patterns
+- [Performance](/examples/performance) - Performance under load
 - [Monitoring](/examples/monitoring) - Security monitoring

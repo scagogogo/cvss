@@ -622,6 +622,6 @@ func validateTemporalMetrics(vector *cvss.Cvss3x) []string {
 
 ## 相关文档
 
-- [时间指标 API](/zh/api/cvss/temporal) - 详细 API 参考
+- [时间指标 API](/zh/api/cvss/calculator) - 详细 API 参考
 - [CVSS 规范](https://www.first.org/cvss/) - 官方 CVSS 文档
-- [漏洞管理](/zh/examples/management) - 生命周期管理示例
+- [漏洞管理](/zh/examples/risk-assessment) - 生命周期管理示例

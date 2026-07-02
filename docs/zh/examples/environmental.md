@@ -672,6 +672,6 @@ func validateEnvironmentalMetrics(vector *cvss.Cvss3x) []string {
 
 ## 相关文档
 
-- [环境指标 API](/zh/api/cvss/environmental) - 详细 API 参考
+- [环境指标 API](/zh/api/cvss/calculator) - 详细 API 参考
 - [CVSS 规范](https://www.first.org/cvss/) - 官方 CVSS 文档
 - [风险评估指南](/zh/examples/risk-assessment) - 全面的风险评估示例

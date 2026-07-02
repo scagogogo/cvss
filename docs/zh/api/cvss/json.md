@@ -657,4 +657,4 @@ func robustJSONProcessing(jsonData []byte) (*cvss.Cvss3x, error) {
 
 - [CVSS 数据结构](/zh/api/cvss/cvss3x) - 了解数据结构
 - [JSON 示例](/zh/examples/json) - 详细使用示例
-- [API 集成指南](/zh/api/integration) - 生产环境集成模式
+- [API 集成指南](/zh/api/getting-started) - 生产环境集成模式

@@ -711,4 +711,4 @@ func validateJSONSchema(jsonData []byte) error {
 
 - [JSON API 参考](/zh/api/cvss/json) - 详细的 JSON 文档
 - [CVSS 数据结构](/zh/api/cvss/cvss3x) - 理解数据格式
-- [数据库集成指南](/zh/api/integration) - 生产环境集成模式
+- [数据库集成指南](/zh/api/getting-started) - 生产环境集成模式

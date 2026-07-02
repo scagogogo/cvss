@@ -287,12 +287,12 @@ func processBatch(vectors []string) {
 1. **[API 详细文档](/zh/api/)** - 了解所有可用的 API
 2. **[示例代码](/zh/examples/)** - 查看更多实际使用示例
 3. **[CVSS 包详解](/zh/api/cvss/)** - 深入了解核心功能
-4. **[最佳实践](/zh/api/best-practices)** - 生产环境使用建议
+4. **[最佳实践](/zh/api/getting-started)** - 生产环境使用建议
 
 ## 获取帮助
 
 如果遇到问题：
 
-- 查看 [常见问题](/zh/api/faq)
+- 查看 [常见问题](/zh/api/getting-started)
 - 浏览 [GitHub Issues](https://github.com/scagogogo/cvss-skills/issues)
 - 参与 [社区讨论](https://github.com/scagogogo/cvss-skills/discussions)

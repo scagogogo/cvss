@@ -696,4 +696,4 @@ After mastering distance calculations, you can explore:
 
 - [Distance Calculator API](/api/cvss/distance) - Detailed API reference
 - [Vector Comparison Guide](/examples/comparison) - Comparison techniques
-- [Clustering Algorithms](/examples/clustering) - Advanced clustering methods
+- [Clustering Algorithms](/examples/production) - Advanced clustering methods

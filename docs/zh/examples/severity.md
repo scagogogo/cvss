@@ -659,6 +659,6 @@ func testSeverityClassification() {
 
 ## 相关文档
 
-- [严重性 API 参考](/zh/api/cvss/severity) - 详细 API 文档
+- [严重性 API 参考](/zh/api/cvss/calculator) - 详细 API 文档
 - [计算器](/zh/api/cvss/calculator) - 分数计算方法
-- [风险管理指南](/zh/examples/risk-management) - 企业风险管理
+- [风险管理指南](/zh/examples/risk-assessment) - 企业风险管理

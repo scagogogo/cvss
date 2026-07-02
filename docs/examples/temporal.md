@@ -622,6 +622,6 @@ After mastering temporal metrics, you can explore:
 
 ## Related Documentation
 
-- [Temporal Metrics API](/api/cvss/temporal) - Detailed API reference
+- [Temporal Metrics API](/api/cvss/calculator) - Detailed API reference
 - [CVSS Specification](https://www.first.org/cvss/) - Official CVSS documentation
-- [Vulnerability Management](/examples/management) - Lifecycle management examples
+- [Vulnerability Management](/examples/risk-assessment) - Lifecycle management examples

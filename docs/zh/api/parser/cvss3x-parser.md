@@ -552,5 +552,5 @@ func parseWithLogging(vectorStr string) (*cvss.Cvss3x, error) {
 
 - [parser 包概述](/zh/api/parser/)
 - [Cvss3x 数据结构](/zh/api/cvss/cvss3x)
-- [错误处理指南](/zh/api/error-handling)
+- [错误处理指南](/zh/api/cvss/)
 - [解析示例](/zh/examples/parsing)

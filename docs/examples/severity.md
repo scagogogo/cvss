@@ -659,6 +659,6 @@ After mastering severity levels, you can explore:
 
 ## Related Documentation
 
-- [Severity API Reference](/api/cvss/severity) - Detailed API documentation
+- [Severity API Reference](/api/cvss/calculator) - Detailed API documentation
 - [Calculator](/api/cvss/calculator) - Score calculation methods
-- [Risk Management Guide](/examples/risk-management) - Enterprise risk management
+- [Risk Management Guide](/examples/risk-assessment) - Enterprise risk management

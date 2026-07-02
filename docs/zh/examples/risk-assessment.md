@@ -523,9 +523,9 @@ func TestRiskAssessment(t *testing.T) {
 
 实施风险评估后，探索：
 
-- [风险管理](/zh/examples/risk-management) - 持续风险管理流程
-- [合规自动化](/zh/examples/compliance) - 自动化合规报告
-- [安全指标](/zh/examples/security-metrics) - 高级安全测量
+- [风险管理](/zh/examples/risk-assessment) - 持续风险管理流程
+- [合规自动化](/zh/examples/edge-cases) - 自动化合规报告
+- [安全指标](/zh/examples/monitoring) - 高级安全测量
 
 ## 相关文档
 

@@ -513,5 +513,5 @@ if cached, found := cache.Get("vector1"); found {
 ## Related Documentation
 
 - [Performance Examples](/examples/performance) - Practical performance optimization
-- [Concurrent Processing](/api/concurrency) - Advanced concurrency patterns
-- [Memory Management](/api/memory) - Memory optimization techniques
+- [Concurrent Processing](/api/performance) - Advanced concurrency patterns
+- [Memory Management](/api/performance) - Memory optimization techniques

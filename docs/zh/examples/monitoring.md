@@ -625,11 +625,11 @@ func (id *IncidentDetector) HandleAlert(alert Alert) {
 实施监控后，考虑：
 
 - [性能优化](/zh/examples/performance) - 高级优化
-- [安全监控](/zh/examples/security) - 安全重点监控
-- [容量规划](/zh/examples/capacity) - 资源规划
+- [安全监控](/zh/examples/edge-cases) - 安全重点监控
+- [容量规划](/zh/examples/performance) - 资源规划
 
 ## 相关文档
 
-- [指标参考](/zh/api/metrics) - 完整的指标文档
-- [告警手册](/zh/api/alerting) - 常见告警模式
-- [故障排除指南](/zh/api/troubleshooting) - 常见问题和解决方案
+- [指标参考](/zh/examples/monitoring) - 完整的指标文档
+- [告警手册](/zh/examples/monitoring) - 常见告警模式
+- [故障排除指南](/zh/api/cvss/) - 常见问题和解决方案

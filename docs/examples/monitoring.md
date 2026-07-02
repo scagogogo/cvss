@@ -626,10 +626,10 @@ After implementing monitoring, consider:
 
 - [Performance Optimization](/examples/performance) - Advanced optimization
 - [Security Monitoring](/examples/security) - Security-focused monitoring
-- [Capacity Planning](/examples/capacity) - Resource planning
+- [Risk Assessment](/examples/risk-assessment) - Risk-level analysis
 
 ## Related Documentation
 
-- [Metrics Reference](/api/metrics) - Complete metrics documentation
-- [Alerting Cookbook](/api/alerting) - Common alerting patterns
-- [Troubleshooting Guide](/api/troubleshooting) - Common issues and solutions
+- [Performance Guide](/api/performance) - Performance characteristics
+- [Error Handling](/api/error-handling) - Diagnosing failures
+- [Testing](/api/testing) - Validating monitoring code
