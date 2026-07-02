@@ -81,8 +81,7 @@ func TestVectorParsing(t *testing.T) {
 
     for _, tc := range testCases {
         t.Run(tc.name, func(t *testing.T) {
-            parser := parser.NewCvss3xParser(tc.vector)
-            vector, err := parser.Parse()
+            vector, err := parser.ParseString(tc.vector)
 
             if tc.expectError {
                 assert.Error(t, err)
@@ -135,11 +134,10 @@ func NewTestFixtures() *TestFixtures {
 // Test helpers
 func parseVector(t *testing.T, vectorStr string) *cvss.Cvss3x {
     t.Helper()
-    
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, err := parser.Parse()
+
+    vector, err := parser.ParseString(vectorStr)
     require.NoError(t, err)
-    
+
     return vector
 }
 
@@ -181,8 +179,7 @@ func TestCVSSProperties(t *testing.T) {
             parsedVector, err := parser.Parse()
             if err != nil {
                 return true // Invalid vectors are expected to fail
-            }
-            
+            }            
             calculator := cvss.NewCalculator(parsedVector)
             score, err := calculator.Calculate()
             if err != nil {
@@ -370,6 +367,59 @@ func TestHTTPAPIEndToEnd(t *testing.T) {
 }
 ```
 
+## Testing Error Conditions
+
+Test the real error shapes: parse sentinels via `errors.Is`, and validation via `errors.As` on `cvss.ValidationErrors` (see [Error Handling](/api/error-handling)).
+
+```go
+func TestParseSentinelErrors(t *testing.T) {
+    // Missing CVSS: prefix
+    _, err := parser.ParseString("not-a-vector")
+    assert.ErrorIs(t, err, parser.ErrParserMagicHead)
+
+    // Duplicate metric key (AV appears twice)
+    _, err = parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/AV:P")
+    assert.ErrorIs(t, err, parser.ErrDuplicateMetric)
+
+    // Unknown metric value -> plain fmt.Errorf (not a sentinel)
+    _, err = parser.ParseString("CVSS:3.1/AV:X/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+    require.Error(t, err)
+    assert.False(t, errors.Is(err, parser.ErrParserMagicHead))
+}
+
+func TestValidationReportsAllMissingMetrics(t *testing.T) {
+    // Parses fine, but is missing C/I/A base metrics
+    cv, err := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U")
+    require.NoError(t, err)
+
+    err = cv.Validate()
+    require.Error(t, err)
+
+    var ve cvss.ValidationErrors
+    require.True(t, errors.As(err, &ve))
+    assert.ElementsMatch(t, []string{"C", "I", "A"}, ve.MissingMetrics())
+
+    // Calculate() surfaces the same incompleteness via Check()'s error
+    _, err = cvss.NewCalculator(cv).Calculate()
+    require.Error(t, err)
+}
+
+func TestParseDoesNotPanicOnMalformedInput(t *testing.T) {
+    inputs := []string{
+        "",
+        "CVSS:3.1",
+        "CVSS:3.1/",
+        "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H\x00",
+        strings.Repeat("CVSS:3.1/AV:N/", 500),
+    }
+    for _, in := range inputs {
+        assert.NotPanics(t, func() {
+            _, _ = parser.ParseString(in)
+        })
+    }
+}
+```
+
 ## Performance Testing
 
 ### Benchmark Tests
@@ -380,8 +430,7 @@ func BenchmarkVectorProcessing(b *testing.B) {
     
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
-        parser := parser.NewCvss3xParser(vector)
-        parsedVector, _ := parser.Parse()
+        parsedVector, _ := parser.ParseString(vector)
         calculator := cvss.NewCalculator(parsedVector)
         calculator.Calculate()
     }
@@ -589,13 +638,13 @@ func generateTestVectors(count int) []string {
 }
 
 func loadTestDataFromFile(t *testing.T, filename string) []TestCase {
-    data, err := ioutil.ReadFile(filename)
+    data, err := os.ReadFile(filename)
     require.NoError(t, err)
-    
+
     var testCases []TestCase
     err = json.Unmarshal(data, &testCases)
     require.NoError(t, err)
-    
+
     return testCases
 }
 
