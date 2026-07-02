@@ -155,7 +155,7 @@ func (dc *DistanceCalculator) ScoreDifference() float64
 
 ```go
 // 解析 -> 计算 -> 输出
-vector, err := parser.Parse(vectorString)
+vector, err := parser.ParseString(vectorString)
 if err != nil {
     return err
 }
@@ -176,7 +176,7 @@ func processBatch(vectors []string) []Result {
     var results []Result
     
     for _, vectorStr := range vectors {
-        vector, err := parser.Parse(vectorStr)
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             continue
         }
@@ -202,8 +202,8 @@ func processBatch(vectors []string) []Result {
 
 ```go
 func compareVectors(v1, v2 string) ComparisonResult {
-    vector1, _ := parser.Parse(v1)
-    vector2, _ := parser.Parse(v2)
+    vector1, _ := parser.ParseString(v1)
+    vector2, _ := parser.ParseString(v2)
     
     calc1 := cvss.NewCalculator(vector1)
     calc2 := cvss.NewCalculator(vector2)

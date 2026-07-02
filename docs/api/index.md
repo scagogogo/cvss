@@ -192,7 +192,7 @@ if err := cv.Validate(); err != nil {
 Always check errors and provide appropriate handling:
 
 ```go
-vector, err := parser.Parse()
+vector, err := parser.ParseString(vectorStr)
 if err != nil {
     log.Printf("Parse failed: %v", err)
     return

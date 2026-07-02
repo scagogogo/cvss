@@ -174,7 +174,7 @@ graph TD
 始终检查错误并提供适当的处理：
 
 ```go
-vector, err := parser.Parse()
+vector, err := parser.ParseString(vectorStr)
 if err != nil {
     log.Printf("解析失败: %v", err)
     return

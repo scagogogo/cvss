@@ -483,17 +483,26 @@ fmt.Printf("Average duration: %v\n", result.AverageDuration)
 fmt.Printf("Operations/sec: %.0f\n", result.OperationsPerSecond)
 ```
 
-### Object Pool Usage
+### Per-Call Parsing
+
+`Cvss3xParser` binds its input string at construction and cannot be rebound (there is no `SetVector`), so there is no parser object pool to draw from. For repeated one-shot parsing, just call `parser.ParseString` — each call constructs a fresh, cheap parser:
 
 ```go
-pool := NewParserPool(10)
-defer pool.Reset()
+vectors := []string{
+    "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+    "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:L",
+}
 
-parser := pool.GetParser()
-defer pool.PutParser(parser)
-
-vector, err := parser.Parse("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+for _, v := range vectors {
+    cv, err := parser.ParseString(v)
+    if err != nil {
+        continue
+    }
+    // ... use cv
+}
 ```
+
+For concurrent bulk parsing, `parser.BatchParse(vectors, workerCount)` handles worker goroutines and per-input error collection for you.
 
 ### Cache Usage
 
