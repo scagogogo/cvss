@@ -1,31 +1,28 @@
 # Error Handling Guide
 
-This guide covers comprehensive error handling patterns, error types, and best practices for robust CVSS Skills applications.
+This guide covers the real error surfaces in CVSS Skills and the patterns for handling them robustly.
 
 ## Error Taxonomy
 
-All errors implement the `CVSSError` interface and carry an `ErrorType`, so a single `switch` can route handling by category:
+There is no `CVSSError` interface or `ErrorType` enum. Errors come from two places — the **parser** (sentinel errors and `fmt.Errorf`) and the **cvss package** (`ValidationError` / `ValidationErrors`). Completeness and scoring both flow through `ValidationErrors`:
 
 ```mermaid
 flowchart TD
-    E["CVSSError (interface)"] --> T{Type()}
-    T --> V["ErrorTypeValidation<br/>missing/illegal metric"]
-    T --> P["ErrorTypeParsing<br/>malformed vector string"]
-    T --> C["ErrorTypeCalculation<br/>score computation failed"]
-    T --> Cfg["ErrorTypeConfiguration"]
-    T --> N["ErrorTypeNetwork"]
-    T --> To["ErrorTypeTimeout"]
-    T --> I["ErrorTypeInternal"]
-
-    V --> Act1["fix vector / report<br/>MissingMetrics()"]
-    P --> Act2["show position + reason"]
-    C --> Act3["retry / log & abort"]
+    In["vector string"] --> P["parser.ParseString"]
+    P -->|bad magic head| S1["parser.ErrParserMagicHead<br/>(sentinel, errors.Is)"]
+    P -->|dup key| S2["parser.ErrDuplicateMetric<br/>(sentinel, errors.Is)"]
+    P -->|bad version / unknown metric<br/>/ illegal value| FE["fmt.Errorf<br/>(plain text)"]
+    P -->|ok| CV["*cvss.Cvss3x"]
+    CV --> V["cvss.Validate() / Check()"]
+    V --> VE["cvss.ValidationErrors<br/>.MissingMetrics()"]
+    CV --> C["calculator.Calculate()"]
+    C -->|incomplete vector| VE2["returns Check()'s error<br/>(plain fmt.Errorf)"]
 
     classDef err fill:#fff1f0,stroke:#ff4d4f,color:#a8071a;
-    class V,P,C,Cfg,N,To,I err;
+    class S1,S2,FE,VE,VE2 err;
 ```
 
-## Recommended Handling Flow
+## Handling Flow
 
 ```mermaid
 sequenceDiagram
@@ -33,16 +30,16 @@ sequenceDiagram
     participant App
     participant Parser
     participant Calc as Calculator
-    App->>Parser: Parse(vector)
+    App->>Parser: ParseString(vector)
     alt parse fails
-        Parser-->>App: ParseError (position)
-        App->>App: log + return 400
+        Parser-->>App: ErrParserMagicHead / ErrDuplicateMetric / fmt.Errorf
+        App->>App: errors.Is check, log + return 400
     else parse ok
         Parser-->>App: *Cvss3x
         App->>Calc: Calculate()
-        alt validation fails
-            Calc-->>App: ValidationErrors
-            App->>App: report MissingMetrics()
+        alt incomplete base metrics
+            Calc-->>App: Check()'s error (fmt.Errorf)
+            App->>App: report via Validate().MissingMetrics()
         else ok
             Calc-->>App: score, severity
         end
@@ -51,192 +48,63 @@ sequenceDiagram
 
 ## Overview
 
-CVSS Skills provides structured error handling with:
+CVSS Skills error handling is intentionally plain Go — sentinel errors and structured `ValidationErrors`, no custom error interface hierarchy. The building blocks:
 
-- Typed error interfaces
-- Error categorization
-- Recovery strategies
-- Debugging information
-- Logging integration
+- **Sentinel parse errors** (`parser.ErrParserMagicHead`, `parser.ErrDuplicateMetric`) — detect with `errors.Is`
+- **Plain `fmt.Errorf`** — for unsupported versions, unknown metric names, illegal metric values, and the first missing metric from `Check()`
+- **`cvss.ValidationErrors`** — a slice of `*ValidationError`, each naming a metric and a message; `MissingMetrics()` lists the missing ones
 
 ## Error Types
 
-### Core Error Interfaces
+### ValidationError / ValidationErrors
+
+Defined in `pkg/cvss/validate.go`:
 
 ```go
-// CVSSError is the base interface for all CVSS-related errors
-type CVSSError interface {
-    error
-    Code() string
-    Type() ErrorType
-    Details() map[string]interface{}
-    Unwrap() error
-}
-
-// ErrorType categorizes different types of errors
-type ErrorType int
-
-const (
-    ErrorTypeValidation ErrorType = iota
-    ErrorTypeParsing
-    ErrorTypeCalculation
-    ErrorTypeConfiguration
-    ErrorTypeNetwork
-    ErrorTypeTimeout
-    ErrorTypeInternal
-)
-```
-
-### Validation Errors
-
-```go
+// A single failed metric check.
 type ValidationError struct {
-    Field   string `json:"field"`
-    Value   string `json:"value"`
-    Rule    string `json:"rule"`
-    Message string `json:"message"`
-    cause   error
+    Metric  string // short name, e.g. "AV", "PR", "Version"
+    Message string // human-readable description
 }
 
-func (e *ValidationError) Error() string {
-    return fmt.Sprintf("validation failed for field '%s': %s", e.Field, e.Message)
-}
+func (e *ValidationError) Error() string // "metric AV: is required but not set"
 
-func (e *ValidationError) Code() string {
-    return "VALIDATION_ERROR"
-}
+// A collection of all failures from Validate() (does not short-circuit).
+type ValidationErrors []*ValidationError
 
-func (e *ValidationError) Type() ErrorType {
-    return ErrorTypeValidation
-}
-
-func (e *ValidationError) Details() map[string]interface{} {
-    return map[string]interface{}{
-        "field": e.Field,
-        "value": e.Value,
-        "rule":  e.Rule,
-    }
-}
-
-func (e *ValidationError) Unwrap() error {
-    return e.cause
-}
+func (ve ValidationErrors) Error() string
+func (ve ValidationErrors) MissingMetrics() []string // names of missing metrics
+func (ve ValidationErrors) HasErrors() bool
+func (ve ValidationErrors) Unwrap() []error          // Go 1.20+ multi-unwrap
 ```
 
-### Parsing Errors
+`Validate()` returns `ValidationErrors`; `Check()` returns a plain `fmt.Errorf` for the *first* missing/invalid metric (it short-circuits). Prefer `Validate()` when you want the full list.
+
+### Parse errors
+
+The parser exports two sentinels; everything else is a `fmt.Errorf`:
 
 ```go
-type ParseError struct {
-    Input    string `json:"input"`
-    Position int    `json:"position"`
-    Expected string `json:"expected"`
-    Found    string `json:"found"`
-    Message  string `json:"message"`
-    cause    error
-}
-
-func (e *ParseError) Error() string {
-    return fmt.Sprintf("parse error at position %d: %s", e.Position, e.Message)
-}
-
-func (e *ParseError) Code() string {
-    return "PARSE_ERROR"
-}
-
-func (e *ParseError) Type() ErrorType {
-    return ErrorTypeParsing
-}
-
-func (e *ParseError) Details() map[string]interface{} {
-    return map[string]interface{}{
-        "input":    e.Input,
-        "position": e.Position,
-        "expected": e.Expected,
-        "found":    e.Found,
-    }
-}
+var ErrParserMagicHead = errors.New("cvss 3.x parser error: invalid magic head, it must equal 'CVSS'")
+var ErrDuplicateMetric = errors.New("cvss 3.x parser error: duplicate metric key")
 ```
 
-### Calculation Errors
+::: warning No *parser.ParseError type
+There is no `*parser.ParseError` struct with `Position`/`Input`/`Expected` fields, and no `ErrorType` enum. Do not type-assert parse errors into such a type — use `errors.Is` for the sentinels and treat the rest as opaque `error`.
+:::
+
+### CSVReadError
+
+Returned by the batch CSV reader (`CSVRead`), one per row that failed to parse:
 
 ```go
-type CalculationError struct {
-    Vector  string `json:"vector"`
-    Metric  string `json:"metric"`
-    Value   string `json:"value"`
-    Message string `json:"message"`
-    cause   error
+type CSVReadError struct {
+    Row   int    // 1-based row number
+    Value string // the raw field value
+    Error error  // the underlying parse error
 }
 
-func (e *CalculationError) Error() string {
-    return fmt.Sprintf("calculation error for metric '%s': %s", e.Metric, e.Message)
-}
-
-func (e *CalculationError) Code() string {
-    return "CALCULATION_ERROR"
-}
-
-func (e *CalculationError) Type() ErrorType {
-    return ErrorTypeCalculation
-}
-```
-
-## Error Creation Functions
-
-### Validation Errors
-
-```go
-func NewValidationError(field, value, rule, message string) *ValidationError {
-    return &ValidationError{
-        Field:   field,
-        Value:   value,
-        Rule:    rule,
-        Message: message,
-    }
-}
-
-func NewValidationErrorf(field, value, rule, format string, args ...interface{}) *ValidationError {
-    return &ValidationError{
-        Field:   field,
-        Value:   value,
-        Rule:    rule,
-        Message: fmt.Sprintf(format, args...),
-    }
-}
-
-func WrapValidationError(err error, field, value, rule string) *ValidationError {
-    return &ValidationError{
-        Field:   field,
-        Value:   value,
-        Rule:    rule,
-        Message: err.Error(),
-        cause:   err,
-    }
-}
-```
-
-### Parsing Errors
-
-```go
-func NewParseError(input string, position int, expected, found, message string) *ParseError {
-    return &ParseError{
-        Input:    input,
-        Position: position,
-        Expected: expected,
-        Found:    found,
-        Message:  message,
-    }
-}
-
-func NewParseErrorf(input string, position int, expected, found, format string, args ...interface{}) *ParseError {
-    return &ParseError{
-        Input:    input,
-        Position: position,
-        Expected: expected,
-        Found:    found,
-        Message:  fmt.Sprintf(format, args...),
-    }
-}
+func (e CSVReadError) String() string // "row 3: \"...\": <error>"
 ```
 
 ## Error Handling Patterns
@@ -245,34 +113,32 @@ func NewParseErrorf(input string, position int, expected, found, format string, 
 
 ```go
 func ProcessVector(vectorStr string) (*VectorResult, error) {
-    // Validate input
     if vectorStr == "" {
-        return nil, NewValidationError("vector", vectorStr, "required", "vector string cannot be empty")
+        return nil, fmt.Errorf("vector string cannot be empty")
     }
-    
     if len(vectorStr) > 500 {
-        return nil, NewValidationError("vector", vectorStr, "max_length", "vector string too long")
+        return nil, fmt.Errorf("vector string too long")
     }
-    
-    // Parse vector
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, err := parser.Parse()
+
+    // Parse
+    vector, err := parser.ParseString(vectorStr)
     if err != nil {
-        // Wrap parsing error with additional context
-        if parseErr, ok := err.(*ParseError); ok {
-            parseErr.Input = vectorStr
-            return nil, parseErr
+        if errors.Is(err, parser.ErrParserMagicHead) {
+            return nil, fmt.Errorf("not a CVSS vector (missing 'CVSS:' prefix): %w", err)
         }
-        return nil, NewParseError(vectorStr, 0, "valid CVSS vector", "invalid format", err.Error())
+        if errors.Is(err, parser.ErrDuplicateMetric) {
+            return nil, fmt.Errorf("duplicate metric in vector: %w", err)
+        }
+        return nil, fmt.Errorf("parse failed: %w", err)
     }
-    
-    // Calculate score
+
+    // Score — Calculate() runs Check() internally and returns its error
     calculator := cvss.NewCalculator(vector)
     score, err := calculator.Calculate()
     if err != nil {
-        return nil, NewCalculationError(vectorStr, "score", "", err.Error())
+        return nil, fmt.Errorf("cannot score vector: %w", err)
     }
-    
+
     return &VectorResult{
         Vector:   vectorStr,
         Score:    score,
@@ -281,360 +147,152 @@ func ProcessVector(vectorStr string) (*VectorResult, error) {
 }
 ```
 
+### Reporting Missing Metrics
+
+When a vector parses but is incomplete, surface *all* missing metrics via `Validate()`:
+
+```go
+func ReportProblems(vectorStr string) error {
+    cv, err := parser.ParseString(vectorStr)
+    if err != nil {
+        return err
+    }
+    if err := cv.Validate(); err != nil {
+        if ve, ok := err.(cvss.ValidationErrors); ok {
+            return fmt.Errorf("vector %q is missing metrics: %v", vectorStr, ve.MissingMetrics())
+        }
+        return err
+    }
+    return nil
+}
+```
+
+`errors.As` also works per-entry thanks to `ValidationErrors.Unwrap()`:
+
+```go
+var ve *cvss.ValidationError
+if errors.As(err, &ve) {
+    fmt.Printf("problem metric: %s (%s)\n", ve.Metric, ve.Message)
+}
+```
+
 ### Error Recovery
+
+Real recovery for CVSS is limited — an unknown metric value cannot be "fixed" without changing semantics. A defensible recovery is to retry a prefix-less input with `ParseRelaxed`, or to fall back to a known-good default vector:
 
 ```go
 func ProcessVectorWithRecovery(vectorStr string) (*VectorResult, error) {
     result, err := ProcessVector(vectorStr)
-    if err != nil {
-        // Attempt recovery based on error type
-        switch e := err.(type) {
-        case *ValidationError:
-            if e.Field == "vector" && e.Rule == "max_length" {
-                // Attempt to truncate and retry
-                truncated := vectorStr[:500]
-                return ProcessVector(truncated)
-            }
-        case *ParseError:
-            // Attempt to fix common parsing issues
-            if fixed := attemptParseRecovery(vectorStr, e); fixed != "" {
-                return ProcessVector(fixed)
-            }
-        }
-        
-        // Return original error if recovery fails
-        return nil, err
+    if err == nil {
+        return result, nil
     }
-    
-    return result, nil
-}
 
-func attemptParseRecovery(vectorStr string, parseErr *ParseError) string {
-    // Common fixes for parsing errors
-    fixes := map[string]string{
-        "AV:X": "AV:N", // Unknown attack vector -> Network
-        "AC:X": "AC:L", // Unknown complexity -> Low
-        "PR:X": "PR:N", // Unknown privileges -> None
-        "UI:X": "UI:N", // Unknown interaction -> None
-        "S:X":  "S:U",  // Unknown scope -> Unchanged
-        "C:X":  "C:L",  // Unknown impact -> Low
-        "I:X":  "I:L",
-        "A:X":  "A:L",
+    // If it failed on the magic head, the input may simply lack the prefix
+    if errors.Is(err, parser.ErrParserMagicHead) {
+        if cv, relaxErr := parser.ParseRelaxed(vectorStr, "3.1"); relaxErr == nil {
+            return ProcessVector(cv.String())
+        }
     }
-    
-    fixed := vectorStr
-    for invalid, valid := range fixes {
-        fixed = strings.ReplaceAll(fixed, invalid, valid)
-    }
-    
-    if fixed != vectorStr {
-        return fixed
-    }
-    
-    return ""
+
+    return nil, err
 }
 ```
 
+::: warning Do not rewrite unknown metric values
+Silently substituting `AV:X` → `AV:N` (or similar) changes the score under the user's nose. Prefer to reject and report the offending metric rather than guess.
+:::
+
 ### Batch Error Handling
+
+`parser.BatchParse` and `parser.BatchValidate` already collect per-input errors in order. For your own batch that also scores, accumulate results and errors:
 
 ```go
 type BatchResult struct {
-    Results []VectorResult `json:"results"`
-    Errors  []BatchError   `json:"errors"`
-    Summary BatchSummary   `json:"summary"`
+    Results []VectorResult
+    Errors  []BatchError
 }
 
 type BatchError struct {
-    Index   int    `json:"index"`
-    Vector  string `json:"vector"`
-    Error   string `json:"error"`
-    Code    string `json:"code"`
-    Type    string `json:"type"`
-}
-
-type BatchSummary struct {
-    Total      int `json:"total"`
-    Successful int `json:"successful"`
-    Failed     int `json:"failed"`
-    SuccessRate float64 `json:"success_rate"`
+    Index  int
+    Vector string
+    Err    error
 }
 
 func ProcessVectorsBatch(vectors []string) *BatchResult {
-    result := &BatchResult{
-        Results: make([]VectorResult, 0),
-        Errors:  make([]BatchError, 0),
-    }
-    
+    result := &BatchResult{}
     for i, vectorStr := range vectors {
-        vectorResult, err := ProcessVector(vectorStr)
+        vr, err := ProcessVector(vectorStr)
         if err != nil {
-            batchErr := BatchError{
-                Index:  i,
-                Vector: vectorStr,
-                Error:  err.Error(),
-            }
-            
-            if cvssErr, ok := err.(CVSSError); ok {
-                batchErr.Code = cvssErr.Code()
-                batchErr.Type = cvssErr.Type().String()
-            }
-            
-            result.Errors = append(result.Errors, batchErr)
-        } else {
-            result.Results = append(result.Results, *vectorResult)
+            result.Errors = append(result.Errors, BatchError{Index: i, Vector: vectorStr, Err: err})
+            continue
         }
+        result.Results = append(result.Results, *vr)
     }
-    
-    // Calculate summary
-    result.Summary = BatchSummary{
-        Total:      len(vectors),
-        Successful: len(result.Results),
-        Failed:     len(result.Errors),
-    }
-    result.Summary.SuccessRate = float64(result.Summary.Successful) / float64(result.Summary.Total) * 100
-    
     return result
 }
 ```
 
-## Error Context and Debugging
-
-### Error Context
-
-```go
-type ErrorContext struct {
-    RequestID   string                 `json:"request_id"`
-    UserID      string                 `json:"user_id,omitempty"`
-    Timestamp   time.Time              `json:"timestamp"`
-    Operation   string                 `json:"operation"`
-    Input       interface{}            `json:"input"`
-    Metadata    map[string]interface{} `json:"metadata"`
-    StackTrace  []string               `json:"stack_trace,omitempty"`
-}
-
-func WithContext(err error, ctx *ErrorContext) error {
-    if cvssErr, ok := err.(CVSSError); ok {
-        return &ContextualError{
-            CVSSError: cvssErr,
-            Context:   ctx,
-        }
-    }
-    
-    return &ContextualError{
-        CVSSError: &GenericError{
-            message: err.Error(),
-            code:    "UNKNOWN_ERROR",
-            errType: ErrorTypeInternal,
-        },
-        Context: ctx,
-    }
-}
-
-type ContextualError struct {
-    CVSSError
-    Context *ErrorContext `json:"context"`
-}
-
-func (e *ContextualError) Error() string {
-    return fmt.Sprintf("%s (request: %s, operation: %s)", 
-        e.CVSSError.Error(), e.Context.RequestID, e.Context.Operation)
-}
-```
-
-### Stack Trace Capture
-
-```go
-func captureStackTrace() []string {
-    var stack []string
-    
-    for i := 2; ; i++ { // Skip captureStackTrace and caller
-        pc, file, line, ok := runtime.Caller(i)
-        if !ok {
-            break
-        }
-        
-        fn := runtime.FuncForPC(pc)
-        if fn == nil {
-            continue
-        }
-        
-        stack = append(stack, fmt.Sprintf("%s:%d %s", 
-            filepath.Base(file), line, fn.Name()))
-    }
-    
-    return stack
-}
-
-func NewErrorWithStack(message, code string, errType ErrorType) CVSSError {
-    return &GenericError{
-        message:    message,
-        code:       code,
-        errType:    errType,
-        stackTrace: captureStackTrace(),
-    }
-}
-```
-
-## Logging Integration
-
-### Structured Error Logging
-
-```go
-type ErrorLogger struct {
-    logger *logrus.Logger
-}
-
-func NewErrorLogger() *ErrorLogger {
-    logger := logrus.New()
-    logger.SetFormatter(&logrus.JSONFormatter{})
-    return &ErrorLogger{logger: logger}
-}
-
-func (el *ErrorLogger) LogError(ctx context.Context, err error) {
-    fields := logrus.Fields{
-        "error": err.Error(),
-        "timestamp": time.Now().UTC(),
-    }
-    
-    // Add request context if available
-    if requestID := getRequestID(ctx); requestID != "" {
-        fields["request_id"] = requestID
-    }
-    
-    if userID := getUserID(ctx); userID != "" {
-        fields["user_id"] = userID
-    }
-    
-    // Add error-specific fields
-    if cvssErr, ok := err.(CVSSError); ok {
-        fields["error_code"] = cvssErr.Code()
-        fields["error_type"] = cvssErr.Type().String()
-        
-        for k, v := range cvssErr.Details() {
-            fields[k] = v
-        }
-    }
-    
-    // Add contextual information
-    if contextErr, ok := err.(*ContextualError); ok {
-        fields["operation"] = contextErr.Context.Operation
-        fields["input"] = contextErr.Context.Input
-        
-        if len(contextErr.Context.StackTrace) > 0 {
-            fields["stack_trace"] = contextErr.Context.StackTrace
-        }
-    }
-    
-    el.logger.WithFields(fields).Error("CVSS processing error")
-}
-```
+For CSV input, `cvss.ReadCSVLax` returns both the successfully parsed vectors and a `[]CSVReadError`, one per bad row — iterate the errors to report line numbers.
 
 ## HTTP Error Responses
 
-### REST API Error Format
+Map the error kind to an HTTP status without inventing error interfaces:
 
 ```go
 type APIError struct {
-    Error   string            `json:"error"`
-    Code    string            `json:"code"`
-    Type    string            `json:"type"`
-    Details map[string]interface{} `json:"details,omitempty"`
-    TraceID string            `json:"trace_id"`
+    Error   string `json:"error"`
+    Details any    `json:"details,omitempty"`
 }
 
-func HandleError(c *gin.Context, err error) {
-    var statusCode int
-    var apiError APIError
-    
-    // Extract trace ID from context
-    apiError.TraceID = getTraceID(c.Request.Context())
-    
-    switch e := err.(type) {
-    case *ValidationError:
-        statusCode = 400
-        apiError = APIError{
-            Error:   e.Error(),
-            Code:    e.Code(),
-            Type:    "validation_error",
-            Details: e.Details(),
-            TraceID: apiError.TraceID,
-        }
-    case *ParseError:
-        statusCode = 400
-        apiError = APIError{
-            Error:   e.Error(),
-            Code:    e.Code(),
-            Type:    "parse_error",
-            Details: e.Details(),
-            TraceID: apiError.TraceID,
-        }
-    case *CalculationError:
-        statusCode = 422
-        apiError = APIError{
-            Error:   e.Error(),
-            Code:    e.Code(),
-            Type:    "calculation_error",
-            Details: e.Details(),
-            TraceID: apiError.TraceID,
-        }
+func HandleError(w http.ResponseWriter, err error) {
+    var apiErr APIError
+    var status int
+
+    switch {
+    case errors.Is(err, parser.ErrParserMagicHead), errors.Is(err, parser.ErrDuplicateMetric):
+        status = http.StatusBadRequest
+        apiErr = APIError{Error: "malformed CVSS vector", Details: err.Error()}
     default:
-        statusCode = 500
-        apiError = APIError{
-            Error:   "Internal server error",
-            Code:    "INTERNAL_ERROR",
-            Type:    "internal_error",
-            TraceID: apiError.TraceID,
+        // Distinguish validation (incomplete/invalid metrics) from other errors
+        var ve cvss.ValidationErrors
+        if errors.As(err, &ve) {
+            status = http.StatusUnprocessableEntity
+            apiErr = APIError{Error: "validation failed", Details: ve.MissingMetrics()}
+        } else {
+            status = http.StatusInternalServerError
+            apiErr = APIError{Error: "internal error", Details: err.Error()}
         }
     }
-    
-    c.JSON(statusCode, apiError)
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(apiErr)
 }
 ```
 
 ## Testing Error Conditions
 
-### Error Testing Utilities
+Test the real error shapes — sentinels via `errors.Is`, validation via `errors.As`:
 
 ```go
-func TestErrorHandling(t *testing.T) {
-    testCases := []struct {
-        name          string
-        input         string
-        expectedError error
-        expectedType  ErrorType
-    }{
-        {
-            name:          "empty vector",
-            input:         "",
-            expectedError: &ValidationError{},
-            expectedType:  ErrorTypeValidation,
-        },
-        {
-            name:          "invalid format",
-            input:         "INVALID",
-            expectedError: &ParseError{},
-            expectedType:  ErrorTypeParsing,
-        },
-        {
-            name:          "unknown metric",
-            input:         "CVSS:3.1/AV:X/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            expectedError: &ParseError{},
-            expectedType:  ErrorTypeParsing,
-        },
-    }
-    
-    for _, tc := range testCases {
-        t.Run(tc.name, func(t *testing.T) {
-            _, err := ProcessVector(tc.input)
-            
-            require.Error(t, err)
-            assert.IsType(t, tc.expectedError, err)
-            
-            if cvssErr, ok := err.(CVSSError); ok {
-                assert.Equal(t, tc.expectedType, cvssErr.Type())
-            }
-        })
-    }
+func TestParseErrors(t *testing.T) {
+    _, err := parser.ParseString("not-a-vector")
+    assert.ErrorIs(t, err, parser.ErrParserMagicHead)
+
+    _, err = parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/AV:P")
+    assert.ErrorIs(t, err, parser.ErrDuplicateMetric)
+}
+
+func TestValidationReportsMissingMetrics(t *testing.T) {
+    cv, err := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U") // missing C/I/A
+    require.NoError(t, err)
+
+    err = cv.Validate()
+    require.Error(t, err)
+
+    var ve cvss.ValidationErrors
+    require.True(t, errors.As(err, &ve))
+    assert.ElementsMatch(t, []string{"C", "I", "A"}, ve.MissingMetrics())
 }
 ```
 
@@ -642,28 +300,21 @@ func TestErrorHandling(t *testing.T) {
 
 ### Error Handling Guidelines
 
-1. **Use Typed Errors**: Always use specific error types for different failure modes
-2. **Provide Context**: Include relevant information in error messages
-3. **Log Appropriately**: Log errors with sufficient detail for debugging
-4. **Fail Fast**: Validate inputs early and return errors immediately
-5. **Graceful Degradation**: Implement fallback mechanisms where appropriate
-
-### Error Message Guidelines
-
-1. **Be Specific**: Clearly describe what went wrong
-2. **Include Context**: Provide relevant input values and expected formats
-3. **Suggest Solutions**: When possible, suggest how to fix the error
-4. **Avoid Sensitive Data**: Don't include sensitive information in error messages
+1. **Use `errors.Is` / `errors.As`** — not type switches on fabricated error types. The only structured parse errors are the two sentinels; the only structured validation type is `cvss.ValidationErrors`.
+2. **Prefer `Validate()` over `Check()` for user-facing reports** — it collects every problem instead of stopping at the first.
+3. **Wrap with context** — `fmt.Errorf("...: %w", err)` preserves the chain for `errors.Is`/`errors.As`.
+4. **Fail fast** — validate input shape before parsing; parse before scoring.
+5. **Don't mask parse errors as scoring errors** — `Calculate()` returns `Check()`'s error, so a scoring failure usually means an incomplete vector, not a math bug.
 
 ### Recovery Strategies
 
-1. **Retry Logic**: Implement retry for transient errors
-2. **Circuit Breakers**: Prevent cascading failures
-3. **Fallback Values**: Use default values when appropriate
-4. **Graceful Degradation**: Reduce functionality rather than failing completely
+1. **Retry with `ParseRelaxed`** when the only failure is a missing `CVSS:` prefix.
+2. **Reject unknown metric values** rather than substituting defaults — silent substitution changes scores.
+3. **Batch resiliently** — collect per-row errors (`CSVRead`, `BatchParse`) so one bad input doesn't abort the run.
 
 ## Related Documentation
 
-- [Validation Guide](/api/error-handling) - Input validation patterns
+- [Parser Reference](/api/parser/cvss3x-parser) - `ErrParserMagicHead`, `ErrDuplicateMetric`, batch helpers
+- [Cvss3x Data Structure](/api/cvss/cvss3x) - `Check()` / `Validate()` / `MissingMetrics()`
+- [Calculator](/api/cvss/calculator) - `Calculate()` and the scoring error path
 - [Testing Guide](/api/testing) - Error testing strategies
-- [Logging Guide](/examples/monitoring) - Structured logging practices
