@@ -135,6 +135,7 @@ export default withMermaid(defineConfig({
                     { text: 'Cvss3x', link: '/zh/api/cvss/cvss3x' },
                     { text: '计算器', link: '/zh/api/cvss/calculator' },
                     { text: '距离计算器', link: '/zh/api/cvss/distance' },
+                    { text: '向量比较', link: '/zh/api/cvss/comparison' },
                     { text: 'JSON 支持', link: '/zh/api/cvss/json' }
                   ]
                 },
