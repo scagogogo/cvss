@@ -140,24 +140,94 @@ cv, _ := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
 fmt.Println(cv.String()) // "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
 ```
 
-### Check
+### IsComplete
 
 ```go
-func (c *Cvss3x) Check() error
+func (x *Cvss3x) IsComplete() bool
 ```
 
-验证 CVSS 向量的完整性和有效性。
+检查 8 个必需的基础指标是否全部已设置。不校验取值，也不检查版本/可选指标 —— 完整结构校验请用 `Validate()`。
 
-**验证内容：**
-- 检查必需的基础指标是否存在
-- 验证指标值的有效性
-- 确保版本号的正确性
+**返回值：**
+- `bool`: 所有基础指标均非 nil 时为 true
 
 **示例：**
 ```go
-err := vector.Check()
-if err != nil {
-    log.Fatalf("向量验证失败: %v", err)
+if cv.IsComplete() {
+    fmt.Println("所有基础指标已设置")
+} else {
+    fmt.Println("不完整，缺失:", cv.MissingMetrics())
+}
+```
+
+### Version
+
+```go
+func (x *Cvss3x) Version() string
+```
+
+返回格式为 `"<主版本>.<次版本>"` 的版本字符串。
+
+**返回值：**
+- `string`: 版本字符串（如 `"3.1"`）
+
+**示例：**
+```go
+fmt.Printf("CVSS 版本: %s\n", cv.Version()) // "3.1"
+```
+
+### HasTemporalMetrics
+
+```go
+func (x *Cvss3x) HasTemporalMetrics() bool
+```
+
+检查是否设置了任何时间指标（`E`、`RL`、`RC`）。
+
+**返回值：**
+- `bool`: 至少存在一个时间指标时为 true
+
+**示例：**
+```go
+if cv.HasTemporalMetrics() {
+    fmt.Println("向量包含时间指标")
+}
+```
+
+### HasEnvironmentalMetrics
+
+```go
+func (x *Cvss3x) HasEnvironmentalMetrics() bool
+```
+
+检查是否设置了任何环境指标。
+
+**返回值：**
+- `bool`: 至少存在一个环境指标时为 true
+
+**示例：**
+```go
+if cv.HasEnvironmentalMetrics() {
+    fmt.Println("向量包含环境指标")
+}
+```
+
+### Check
+
+```go
+func (x *Cvss3x) Check() error
+```
+
+对向量做结构校验：版本号受支持（3.0/3.1）、基础指标组存在且完整、已存在的时间/环境指标组取值合法。返回遇到的第一个错误，若无问题返回 nil。如需收集全部错误（含缺失指标报告），请用 `Validate()`。
+
+**返回值：**
+- `error`: 第一个校验错误，或 nil
+
+**示例：**
+```go
+cv, _ := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+if err := cv.Check(); err != nil {
+    log.Fatalf("向量校验失败: %v", err)
 }
 ```
 

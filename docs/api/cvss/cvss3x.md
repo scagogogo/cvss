@@ -210,6 +210,48 @@ if cv.HasEnvironmentalMetrics() {
 }
 ```
 
+### Check
+
+```go
+func (x *Cvss3x) Check() error
+```
+
+Validates the vector structurally: version number is supported (3.0/3.1), the base metrics group is present and complete, and any temporal/environmental groups that are present have legal values. Returns the first error encountered, or nil if the vector is structurally sound. For full validation that also collects all errors (including missing-metric reporting), use `Validate()`.
+
+**Returns:**
+- `error`: The first validation error, or nil
+
+**Example:**
+```go
+cv, _ := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+if err := cv.Check(); err != nil {
+    log.Fatalf("vector check failed: %v", err)
+}
+```
+
+### Clone
+
+```go
+func (x *Cvss3x) Clone() *Cvss3x
+```
+
+Returns a deep copy of the vector. Mutating the clone (e.g. swapping a metric value) does not affect the original.
+
+**Returns:**
+- `*Cvss3x`: A new, independent copy
+
+**Example:**
+```go
+original, _ := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+cloned := original.Clone()
+
+// Mutate the clone; the original is untouched (Clone is a deep copy)
+cloned.Cvss3xBase.AttackVector = vector.AttackVectorLocal
+fmt.Printf("original AV: %c, cloned AV: %c\n",
+    original.Cvss3xBase.AttackVector.GetShortValue(),
+    cloned.Cvss3xBase.AttackVector.GetShortValue()) // original AV: N, cloned AV: L
+```
+
 ## Usage Examples
 
 ### Creating a Complete Vector
