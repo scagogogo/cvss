@@ -55,17 +55,16 @@ func parseMultipleVersions() {
     
     for version, vectorStr := range vectors {
         fmt.Printf("\n--- Parsing %s ---\n", version)
-        
-        parser := parser.NewCvss3xParser(vectorStr)
-        vector, err := parser.Parse()
+
+        vector, err := parser.ParseString(vectorStr)
         if err != nil {
             fmt.Printf("Error: %v\n", err)
             continue
         }
-        
+
         fmt.Printf("Vector: %s\n", vectorStr)
         fmt.Printf("Parsed Version: %d.%d\n", vector.MajorVersion, vector.MinorVersion)
-        fmt.Printf("Valid: %t\n", vector.IsValid())
+        fmt.Printf("Complete: %t\n", vector.IsComplete())
     }
 }
 ```
@@ -78,16 +77,15 @@ func parseMultipleVersions() {
 func parseBaseOnly() {
     // Minimal required base metrics
     baseVector := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-    
-    parser := parser.NewCvss3xParser(baseVector)
-    vector, err := parser.Parse()
+
+    vector, err := parser.ParseString(baseVector)
     if err != nil {
         log.Fatal(err)
     }
-    
+
     fmt.Printf("Base vector: %s\n", vector.String())
-    fmt.Printf("Has temporal: %t\n", vector.HasTemporal())
-    fmt.Printf("Has environmental: %t\n", vector.HasEnvironmental())
+    fmt.Printf("Has temporal: %t\n", vector.HasTemporalMetrics())
+    fmt.Printf("Has environmental: %t\n", vector.HasEnvironmentalMetrics())
 }
 ```
 
@@ -97,22 +95,21 @@ func parseBaseOnly() {
 func parseWithTemporal() {
     // Vector with temporal metrics
     temporalVector := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:F/RL:O/RC:C"
-    
-    parser := parser.NewCvss3xParser(temporalVector)
-    vector, err := parser.Parse()
+
+    vector, err := parser.ParseString(temporalVector)
     if err != nil {
         log.Fatal(err)
     }
-    
+
     fmt.Printf("Temporal vector: %s\n", vector.String())
-    fmt.Printf("Has temporal: %t\n", vector.HasTemporal())
-    
-    if vector.HasTemporal() {
-        fmt.Printf("Exploit Code Maturity: %s\n", 
+    fmt.Printf("Has temporal: %t\n", vector.HasTemporalMetrics())
+
+    if vector.HasTemporalMetrics() {
+        fmt.Printf("Exploit Code Maturity: %s\n",
             vector.Cvss3xTemporal.ExploitCodeMaturity.GetLongValue())
-        fmt.Printf("Remediation Level: %s\n", 
+        fmt.Printf("Remediation Level: %s\n",
             vector.Cvss3xTemporal.RemediationLevel.GetLongValue())
-        fmt.Printf("Report Confidence: %s\n", 
+        fmt.Printf("Report Confidence: %s\n",
             vector.Cvss3xTemporal.ReportConfidence.GetLongValue())
     }
 }
@@ -124,20 +121,19 @@ func parseWithTemporal() {
 func parseWithEnvironmental() {
     // Vector with environmental metrics
     envVector := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/CR:H/IR:H/AR:H/MAV:L/MAC:H/MPR:H/MUI:R/MS:C/MC:H/MI:H/MA:H"
-    
-    parser := parser.NewCvss3xParser(envVector)
-    vector, err := parser.Parse()
+
+    vector, err := parser.ParseString(envVector)
     if err != nil {
         log.Fatal(err)
     }
-    
+
     fmt.Printf("Environmental vector: %s\n", vector.String())
-    fmt.Printf("Has environmental: %t\n", vector.HasEnvironmental())
-    
-    if vector.HasEnvironmental() {
-        fmt.Printf("Confidentiality Requirement: %s\n", 
+    fmt.Printf("Has environmental: %t\n", vector.HasEnvironmentalMetrics())
+
+    if vector.HasEnvironmentalMetrics() {
+        fmt.Printf("Confidentiality Requirement: %s\n",
             vector.Cvss3xEnvironmental.ConfidentialityRequirement.GetLongValue())
-        fmt.Printf("Modified Attack Vector: %s\n", 
+        fmt.Printf("Modified Attack Vector: %s\n",
             vector.Cvss3xEnvironmental.ModifiedAttackVector.GetLongValue())
     }
 }
@@ -149,25 +145,24 @@ func parseWithEnvironmental() {
 func parseCompleteVector() {
     // Complete vector with base, temporal, and environmental metrics
     completeVector := "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:F/RL:O/RC:C/CR:H/IR:H/AR:H/MAV:L/MAC:H/MPR:H/MUI:R/MS:C/MC:H/MI:H/MA:H"
-    
-    parser := parser.NewCvss3xParser(completeVector)
-    vector, err := parser.Parse()
+
+    vector, err := parser.ParseString(completeVector)
     if err != nil {
         log.Fatal(err)
     }
-    
+
     fmt.Printf("Complete vector: %s\n", vector.String())
-    fmt.Printf("Has temporal: %t\n", vector.HasTemporal())
-    fmt.Printf("Has environmental: %t\n", vector.HasEnvironmental())
+    fmt.Printf("Has temporal: %t\n", vector.HasTemporalMetrics())
+    fmt.Printf("Has environmental: %t\n", vector.HasEnvironmentalMetrics())
     fmt.Printf("Total metrics: %d\n", countMetrics(vector))
 }
 
 func countMetrics(vector *cvss.Cvss3x) int {
     count := 8 // Base metrics
-    if vector.HasTemporal() {
+    if vector.HasTemporalMetrics() {
         count += 3 // Temporal metrics
     }
-    if vector.HasEnvironmental() {
+    if vector.HasEnvironmentalMetrics() {
         count += 11 // Environmental metrics
     }
     return count
@@ -194,44 +189,49 @@ func robustParsing(vectorStr string) (*cvss.Cvss3x, error) {
     }
     
     // Parse with error handling
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, err := parser.Parse()
+    vector, err := parser.ParseString(vectorStr)
     if err != nil {
         return nil, fmt.Errorf("parse failed: %w", err)
     }
-    
-    // Post-parse validation
-    if !vector.IsValid() {
-        return nil, fmt.Errorf("parsed vector is invalid")
+
+    // Post-parse validation (Check returns the first missing/invalid metric)
+    if err := vector.Check(); err != nil {
+        return nil, fmt.Errorf("parsed vector is invalid: %w", err)
     }
-    
+
     return vector, nil
 }
 ```
 
 ### Handling Different Error Types
 
+Parse errors are sentinels (`ErrParserMagicHead`, `ErrDuplicateMetric`) or plain `fmt.Errorf`; validation problems come from the `cvss` package as `ValidationErrors`:
+
 ```go
 func handleParseErrors(vectorStr string) {
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, err := parser.Parse()
-    
+    vector, err := parser.ParseString(vectorStr)
+
     if err != nil {
-        switch e := err.(type) {
-        case *parser.ParseError:
-            fmt.Printf("Parse error: %s\n", e.Message)
-            fmt.Printf("Position: %d\n", e.Position)
-            fmt.Printf("Input: %s\n", e.Input)
-        case *parser.ValidationError:
-            fmt.Printf("Validation error: %s\n", e.Message)
-            fmt.Printf("Metric: %s\n", e.Metric)
-            fmt.Printf("Value: %s\n", e.Value)
-        default:
-            fmt.Printf("Unknown error: %v\n", err)
+        if errors.Is(err, parser.ErrParserMagicHead) {
+            fmt.Printf("Not a CVSS vector (missing 'CVSS:' prefix): %v\n", err)
+        } else if errors.Is(err, parser.ErrDuplicateMetric) {
+            fmt.Printf("Duplicate metric: %v\n", err)
+        } else {
+            fmt.Printf("Parse error: %v\n", err)
         }
         return
     }
-    
+
+    // Completeness is checked separately from parsing
+    if err := vector.Validate(); err != nil {
+        if ve, ok := err.(cvss.ValidationErrors); ok {
+            fmt.Printf("Missing metrics: %v\n", ve.MissingMetrics())
+        } else {
+            fmt.Printf("Validation error: %v\n", err)
+        }
+        return
+    }
+
     fmt.Printf("Successfully parsed: %s\n", vector.String())
 }
 ```
@@ -407,81 +407,66 @@ func (s BatchStats) Print() {
 
 ## Performance Optimization
 
-### Parser Reuse
+### Per-Call Parsing
+
+`Cvss3xParser` binds its input string at construction and cannot be rebound (there is no `SetVector`), so do not try to reuse a parser across vectors. Just call `parser.ParseString` per input — each call constructs a fresh, cheap parser:
 
 ```go
 func optimizedParsing(vectors []string) []ParseResult {
-    // Reuse parser instance
-    parser := parser.NewCvss3xParser("")
     results := make([]ParseResult, len(vectors))
-    
+
     for i, vectorStr := range vectors {
         result := ParseResult{
             Input: vectorStr,
             Index: i,
         }
-        
-        // Reuse parser with new vector
-        parser.SetVector(vectorStr)
-        vector, err := parser.Parse()
-        
+
+        vector, err := robustParsing(vectorStr)
         if err != nil {
             result.Error = err
         } else {
             result.Vector = vector
             result.Success = true
         }
-        
+
         results[i] = result
     }
-    
+
     return results
 }
 ```
 
-### Object Pool Pattern
+### Concurrent Batch Parsing
+
+For concurrent parsing, give each goroutine its own parser (via `ParseString`); the package also provides `parser.BatchParse` which does this for you:
 
 ```go
-var parserPool = sync.Pool{
-    New: func() interface{} {
-        return parser.NewCvss3xParser("")
-    },
-}
-
-func parseWithPool(vectorStr string) (*cvss.Cvss3x, error) {
-    parser := parserPool.Get().(*parser.Cvss3xParser)
-    defer parserPool.Put(parser)
-    
-    parser.SetVector(vectorStr)
-    return parser.Parse()
-}
-
 func pooledBatchParsing(vectors []string) []ParseResult {
     results := make([]ParseResult, len(vectors))
     var wg sync.WaitGroup
-    
+
     for i, vectorStr := range vectors {
         wg.Add(1)
         go func(index int, vector string) {
             defer wg.Done()
-            
+
             result := ParseResult{
                 Input: vector,
                 Index: index,
             }
-            
-            parsed, err := parseWithPool(vector)
+
+            parsed, err := robustParsing(vector)
             if err != nil {
                 result.Error = err
             } else {
                 result.Vector = parsed
                 result.Success = true
             }
-            
+
             results[index] = result
         }(i, vectorStr)
     }
-    
+
     wg.Wait()
     return results
 }
