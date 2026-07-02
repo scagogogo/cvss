@@ -16,14 +16,15 @@ All CVSS metrics implement the `Vector` interface:
 
 ```go
 type Vector interface {
-    GetGroupName() string    // Get metric group name
-    GetShortName() string    // Get metric short name
-    GetLongName() string     // Get metric full name
-    GetShortValue() rune     // Get metric short value
-    GetLongValue() string    // Get metric full value
-    GetDescription() string  // Get metric description
-    GetScore() float64       // Get metric score
-    String() string          // String representation
+    GetGroupName() string    // "Base Metrics" / "Temporal Metrics" / "Environmental Metrics"
+    GetShortName() string    // e.g. "AV"
+    GetLongName() string     // e.g. "Attack Vector"
+    GetShortValue() rune     // e.g. 'N'
+    GetLongValue() string    // e.g. "Network"
+    GetDescription() string  // CVSS spec description
+    GetScore() float64       // score weight (1.0 for Not Defined)
+    IsNotDefined() bool      // whether the value is "Not Defined" (X)
+    String() string          // e.g. "AV:N"
 }
 ```
 
@@ -88,18 +89,30 @@ All base metrics have corresponding modified versions, prefixed with `Modified`:
 
 ### Creating Metric Instances
 
+Each legal metric value is exposed as a pre-defined package-level variable (a singleton). Reference it directly — there is no need to construct it:
+
 ```go
-// Create attack vector metric
-attackVector := &vector.AttackVectorNetwork{}
-fmt.Printf("Attack Vector: %s (%s)\n", 
-    attackVector.GetLongValue(), 
+// Attack Vector = Network
+attackVector := vector.AttackVectorNetwork
+fmt.Printf("Attack Vector: %s (%s)\n",
+    attackVector.GetLongValue(),
     attackVector.GetDescription())
 
-// Create attack complexity metric
-attackComplexity := &vector.AttackComplexityLow{}
-fmt.Printf("Attack Complexity: %s (Score: %.2f)\n", 
-    attackComplexity.GetLongValue(), 
+// Attack Complexity = Low
+attackComplexity := vector.AttackComplexityLow
+fmt.Printf("Attack Complexity: %s (Score: %.2f)\n",
+    attackComplexity.GetLongValue(),
     attackComplexity.GetScore())
+```
+
+Alternatively, resolve a value from its short name/value with a [factory function](/api/vector/interface#factory-functions):
+
+```go
+av, err := vector.GetVectorByShortName("AV", "N")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(av.String()) // AV:N
 ```
 
 ### Using Interface
@@ -110,97 +123,76 @@ func printVectorInfo(v vector.Vector) {
     fmt.Printf("  Group: %s\n", v.GetGroupName())
     fmt.Printf("  Value: %s (%c)\n", v.GetLongValue(), v.GetShortValue())
     fmt.Printf("  Score: %.2f\n", v.GetScore())
+    fmt.Printf("  Not defined: %v\n", v.IsNotDefined())
     fmt.Printf("  String: %s\n", v.String())
 }
 
 // Usage example
-av := &vector.AttackVectorNetwork{}
-printVectorInfo(av)
+printVectorInfo(vector.AttackVectorNetwork)
 ```
 
 ### Vector Factory
 
-```go
-type VectorFactory struct{}
+The package provides factory functions that resolve a metric value from its short value, returning an error for an unknown value. There is one factory per metric (e.g. `GetAttackVector`, `GetExploitCodeMaturity`) plus the generic `GetVectorByShortName`:
 
-func (f *VectorFactory) CreateAttackVector(value rune) (vector.Vector, error) {
-    switch value {
-    case 'N':
-        return &vector.AttackVectorNetwork{}, nil
-    case 'A':
-        return &vector.AttackVectorAdjacent{}, nil
-    case 'L':
-        return &vector.AttackVectorLocal{}, nil
-    case 'P':
-        return &vector.AttackVectorPhysical{}, nil
-    default:
-        return nil, fmt.Errorf("unknown attack vector value: %c", value)
-    }
+```go
+// Per-metric factory
+av, err := vector.GetAttackVector('N')
+if err != nil {
+    log.Fatal(err)
 }
+fmt.Println(av.String()) // AV:N
+
+// Generic factory by short name + value string
+e, err := vector.GetVectorByShortName("E", "F")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(e.String()) // E:F
 ```
 
 ## Metric Details
+
+Each metric value is a pre-defined variable of a type that embeds `*VectorImpl` (see [Vector Interface](/api/vector/interface)). The tables below list the canonical singletons and their score weights.
 
 ### Attack Vector
 
 Describes how an attacker accesses the vulnerable component.
 
+| Singleton | Short Value | Long Value | Score |
+|------------|-------------|------------|-------|
+| `AttackVectorNetwork` | N | Network | 0.85 |
+| `AttackVectorAdjacent` | A | Adjacent | 0.62 |
+| `AttackVectorLocal` | L | Local | 0.55 |
+| `AttackVectorPhysical` | P | Physical | 0.2 |
+
 ```go
-// Network attack vector
-type AttackVectorNetwork struct{}
-func (a *AttackVectorNetwork) GetShortValue() rune { return 'N' }
-func (a *AttackVectorNetwork) GetScore() float64 { return 0.85 }
-
-// Adjacent network attack vector
-type AttackVectorAdjacent struct{}
-func (a *AttackVectorAdjacent) GetShortValue() rune { return 'A' }
-func (a *AttackVectorAdjacent) GetScore() float64 { return 0.62 }
-
-// Local attack vector
-type AttackVectorLocal struct{}
-func (a *AttackVectorLocal) GetShortValue() rune { return 'L' }
-func (a *AttackVectorLocal) GetScore() float64 { return 0.55 }
-
-// Physical attack vector
-type AttackVectorPhysical struct{}
-func (a *AttackVectorPhysical) GetShortValue() rune { return 'P' }
-func (a *AttackVectorPhysical) GetScore() float64 { return 0.2 }
+av := vector.AttackVectorNetwork
+fmt.Printf("%c %.2f\n", av.GetShortValue(), av.GetScore()) // N 0.85
 ```
 
 ### Attack Complexity
 
 Describes the conditions required for a successful attack.
 
-```go
-// Low complexity
-type AttackComplexityLow struct{}
-func (a *AttackComplexityLow) GetShortValue() rune { return 'L' }
-func (a *AttackComplexityLow) GetScore() float64 { return 0.77 }
-
-// High complexity
-type AttackComplexityHigh struct{}
-func (a *AttackComplexityHigh) GetShortValue() rune { return 'H' }
-func (a *AttackComplexityHigh) GetScore() float64 { return 0.44 }
-```
+| Singleton | Short Value | Long Value | Score |
+|------------|-------------|------------|-------|
+| `AttackComplexityLow` | L | Low | 0.77 |
+| `AttackComplexityHigh` | H | High | 0.44 |
 
 ### Impact Metrics
 
 Impact metrics describe the degree of impact a successful attack has on the system.
 
-```go
-// Confidentiality impact
-type ConfidentialityHigh struct{}
-func (c *ConfidentialityHigh) GetShortValue() rune { return 'H' }
-func (c *ConfidentialityHigh) GetScore() float64 { return 0.56 }
+| Singleton | Short Value | Long Value | Score |
+|------------|-------------|------------|-------|
+| `ConfidentialityHigh` | H | High | 0.56 |
+| `ConfidentialityLow` | L | Low | 0.22 |
+| `ConfidentialityNone` | N | None | 0.0 |
 
-type ConfidentialityLow struct{}
-func (c *ConfidentialityLow) GetShortValue() rune { return 'L' }
-func (c *ConfidentialityLow) GetScore() float64 { return 0.22 }
-
-type ConfidentialityNone struct{}
-func (c *ConfidentialityNone) GetShortValue() rune { return 'N' }
-func (c *ConfidentialityNone) GetScore() float64 { return 0.0 }
-```
+::: tip Scope-dependent metrics
+Privileges Required (`PR`) is the only base metric whose weight depends on Scope. Use `vector.GetPrivilegesRequiredScore(pr, scopeChanged)` rather than `pr.GetScore()` — see [Vector Interface](/api/vector/interface#getprivilegesrequiredscore).
+:::
 
 ## Vector Validation
 
@@ -289,28 +281,27 @@ func groupVectorsByType(vectors []vector.Vector) map[string][]vector.Vector {
 
 ### Custom Vector
 
+To implement a custom metric, embed `*vector.VectorImpl` — it already provides every `Vector` interface method, so you only fill in the fields:
+
 ```go
-// Custom vector implementation
+// Custom vector implementation backed by VectorImpl
 type CustomVector struct {
-    groupName   string
-    shortName   string
-    longName    string
-    shortValue  rune
-    longValue   string
-    description string
-    score       float64
+    *vector.VectorImpl
 }
 
-func (c *CustomVector) GetGroupName() string { return c.groupName }
-func (c *CustomVector) GetShortName() string { return c.shortName }
-func (c *CustomVector) GetLongName() string { return c.longName }
-func (c *CustomVector) GetShortValue() rune { return c.shortValue }
-func (c *CustomVector) GetLongValue() string { return c.longValue }
-func (c *CustomVector) GetDescription() string { return c.description }
-func (c *CustomVector) GetScore() float64 { return c.score }
-func (c *CustomVector) String() string {
-    return fmt.Sprintf("%s:%c", c.shortName, c.shortValue)
+cv := &CustomVector{
+    VectorImpl: &vector.VectorImpl{
+        GroupName:   "Base Metrics",
+        ShortName:   "AV",
+        LongName:    "Attack Vector",
+        ShortValue:  'N',
+        LongValue:   "Network",
+        Description: "custom",
+        Score:       0.85,
+    },
 }
+fmt.Println(cv.String())        // AV:N
+fmt.Println(cv.IsNotDefined())  // false
 ```
 
 ### Vector Registry
@@ -367,23 +358,9 @@ func setCachedVector(key string, v vector.Vector) {
 }
 ```
 
-### Object Pool
+### No Object Pool Needed
 
-```go
-var vectorPool = sync.Pool{
-    New: func() interface{} {
-        return &vector.AttackVectorNetwork{}
-    },
-}
-
-func getVectorFromPool() vector.Vector {
-    return vectorPool.Get().(vector.Vector)
-}
-
-func putVectorToPool(v vector.Vector) {
-    vectorPool.Put(v)
-}
-```
+The pre-defined singletons are immutable package-level values shared by all callers — there is nothing to pool. Resolving a value via the factory functions is a cheap `switch` that returns the existing singleton, so each call costs essentially a pointer copy. Avoid wrapping them in a `sync.Pool`; just call `vector.GetAttackVector('N')` or reference `vector.AttackVectorNetwork` directly.
 
 ## Best Practices
 
@@ -411,11 +388,20 @@ func safeGetScore(v vector.Vector) float64 {
 
 ### 3. Interface Composition
 
+The `Vector` interface is intentionally flat — it does not split into sub-interfaces. If you need a narrower view (e.g. only the scoring methods), define a local interface in your own code and assert against it:
+
 ```go
-type CVSSVector interface {
-    vector.Vector
-    IsRequired() bool
-    GetCategory() string
+// Local, application-specific narrower interface
+type Scorer interface {
+    GetScore() float64
+    IsNotDefined() bool
+}
+
+func scoreOf(s Scorer) float64 {
+    if s.IsNotDefined() {
+        return 1.0 // no-op weight
+    }
+    return s.GetScore()
 }
 ```
 

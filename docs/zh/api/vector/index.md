@@ -16,14 +16,15 @@ import "github.com/scagogogo/cvss-skills/pkg/vector"
 
 ```go
 type Vector interface {
-    GetGroupName() string    // 获取指标组名称
-    GetShortName() string    // 获取指标简称
-    GetLongName() string     // 获取指标全称
-    GetShortValue() rune     // 获取指标简写值
-    GetLongValue() string    // 获取指标完整值
-    GetDescription() string  // 获取指标描述
-    GetScore() float64       // 获取指标评分
-    String() string          // 字符串表示
+    GetGroupName() string    // "Base Metrics" / "Temporal Metrics" / "Environmental Metrics"
+    GetShortName() string    // 如 "AV"
+    GetLongName() string     // 如 "Attack Vector"
+    GetShortValue() rune     // 如 'N'
+    GetLongValue() string    // 如 "Network"
+    GetDescription() string  // CVSS 规范描述
+    GetScore() float64       // 评分权重（Not Defined 为 1.0）
+    IsNotDefined() bool      // 是否为 "Not Defined" (X)
+    String() string          // 如 "AV:N"
 }
 ```
 
@@ -88,18 +89,30 @@ type Vector interface {
 
 ### 创建指标实例
 
+每个合法的指标取值都作为预定义的包级变量（单例）暴露。直接引用即可 —— 无需构造：
+
 ```go
-// 创建攻击向量指标
-attackVector := &vector.AttackVectorNetwork{}
-fmt.Printf("攻击向量: %s (%s)\n", 
-    attackVector.GetLongValue(), 
+// 攻击向量 = Network
+attackVector := vector.AttackVectorNetwork
+fmt.Printf("攻击向量: %s (%s)\n",
+    attackVector.GetLongValue(),
     attackVector.GetDescription())
 
-// 创建攻击复杂性指标
-attackComplexity := &vector.AttackComplexityLow{}
-fmt.Printf("攻击复杂性: %s (评分: %.2f)\n", 
-    attackComplexity.GetLongValue(), 
+// 攻击复杂性 = Low
+attackComplexity := vector.AttackComplexityLow
+fmt.Printf("攻击复杂性: %s (评分: %.2f)\n",
+    attackComplexity.GetLongValue(),
     attackComplexity.GetScore())
+```
+
+也可以用[工厂函数](/zh/api/vector/interface#工厂函数)从短名/取值解析：
+
+```go
+av, err := vector.GetVectorByShortName("AV", "N")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(av.String()) // AV:N
 ```
 
 ### 使用接口
@@ -110,97 +123,76 @@ func printVectorInfo(v vector.Vector) {
     fmt.Printf("  组: %s\n", v.GetGroupName())
     fmt.Printf("  值: %s (%c)\n", v.GetLongValue(), v.GetShortValue())
     fmt.Printf("  评分: %.2f\n", v.GetScore())
+    fmt.Printf("  Not defined: %v\n", v.IsNotDefined())
     fmt.Printf("  字符串: %s\n", v.String())
 }
 
 // 使用示例
-av := &vector.AttackVectorNetwork{}
-printVectorInfo(av)
+printVectorInfo(vector.AttackVectorNetwork)
 ```
 
 ### 向量工厂
 
-```go
-type VectorFactory struct{}
+包提供了从短值解析指标取值的工厂函数，对未知取值返回错误。每个指标一个工厂（如 `GetAttackVector`、`GetExploitCodeMaturity`），另有通用的 `GetVectorByShortName`：
 
-func (f *VectorFactory) CreateAttackVector(value rune) (vector.Vector, error) {
-    switch value {
-    case 'N':
-        return &vector.AttackVectorNetwork{}, nil
-    case 'A':
-        return &vector.AttackVectorAdjacent{}, nil
-    case 'L':
-        return &vector.AttackVectorLocal{}, nil
-    case 'P':
-        return &vector.AttackVectorPhysical{}, nil
-    default:
-        return nil, fmt.Errorf("未知的攻击向量值: %c", value)
-    }
+```go
+// 每指标工厂
+av, err := vector.GetAttackVector('N')
+if err != nil {
+    log.Fatal(err)
 }
+fmt.Println(av.String()) // AV:N
+
+// 按短名 + 取值字符串的通用工厂
+e, err := vector.GetVectorByShortName("E", "F")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(e.String()) // E:F
 ```
 
 ## 指标详细信息
+
+每个指标取值都是一个嵌入 `*VectorImpl` 的类型的预定义变量（见 [Vector 接口](/zh/api/vector/interface)）。下表列出规范单例及其评分权重。
 
 ### 攻击向量 (Attack Vector)
 
 描述攻击者如何访问漏洞组件。
 
+| 单例 | 短值 | 全值 | 评分 |
+|------|------|------|------|
+| `AttackVectorNetwork` | N | Network | 0.85 |
+| `AttackVectorAdjacent` | A | Adjacent | 0.62 |
+| `AttackVectorLocal` | L | Local | 0.55 |
+| `AttackVectorPhysical` | P | Physical | 0.2 |
+
 ```go
-// 网络攻击向量
-type AttackVectorNetwork struct{}
-func (a *AttackVectorNetwork) GetShortValue() rune { return 'N' }
-func (a *AttackVectorNetwork) GetScore() float64 { return 0.85 }
-
-// 相邻网络攻击向量
-type AttackVectorAdjacent struct{}
-func (a *AttackVectorAdjacent) GetShortValue() rune { return 'A' }
-func (a *AttackVectorAdjacent) GetScore() float64 { return 0.62 }
-
-// 本地攻击向量
-type AttackVectorLocal struct{}
-func (a *AttackVectorLocal) GetShortValue() rune { return 'L' }
-func (a *AttackVectorLocal) GetScore() float64 { return 0.55 }
-
-// 物理攻击向量
-type AttackVectorPhysical struct{}
-func (a *AttackVectorPhysical) GetShortValue() rune { return 'P' }
-func (a *AttackVectorPhysical) GetScore() float64 { return 0.2 }
+av := vector.AttackVectorNetwork
+fmt.Printf("%c %.2f\n", av.GetShortValue(), av.GetScore()) // N 0.85
 ```
 
 ### 攻击复杂性 (Attack Complexity)
 
 描述攻击成功所需的条件。
 
-```go
-// 低复杂性
-type AttackComplexityLow struct{}
-func (a *AttackComplexityLow) GetShortValue() rune { return 'L' }
-func (a *AttackComplexityLow) GetScore() float64 { return 0.77 }
-
-// 高复杂性
-type AttackComplexityHigh struct{}
-func (a *AttackComplexityHigh) GetShortValue() rune { return 'H' }
-func (a *AttackComplexityHigh) GetScore() float64 { return 0.44 }
-```
+| 单例 | 短值 | 全值 | 评分 |
+|------|------|------|------|
+| `AttackComplexityLow` | L | Low | 0.77 |
+| `AttackComplexityHigh` | H | High | 0.44 |
 
 ### 影响指标
 
 影响指标描述了成功攻击对系统的影响程度。
 
-```go
-// 机密性影响
-type ConfidentialityHigh struct{}
-func (c *ConfidentialityHigh) GetShortValue() rune { return 'H' }
-func (c *ConfidentialityHigh) GetScore() float64 { return 0.56 }
+| 单例 | 短值 | 全值 | 评分 |
+|------|------|------|------|
+| `ConfidentialityHigh` | H | High | 0.56 |
+| `ConfidentialityLow` | L | Low | 0.22 |
+| `ConfidentialityNone` | N | None | 0.0 |
 
-type ConfidentialityLow struct{}
-func (c *ConfidentialityLow) GetShortValue() rune { return 'L' }
-func (c *ConfidentialityLow) GetScore() float64 { return 0.22 }
-
-type ConfidentialityNone struct{}
-func (c *ConfidentialityNone) GetShortValue() rune { return 'N' }
-func (c *ConfidentialityNone) GetScore() float64 { return 0.0 }
-```
+::: tip 依赖范围的指标
+所需权限（`PR`）是唯一一个权重依赖 Scope 的基础指标。请使用 `vector.GetPrivilegesRequiredScore(pr, scopeChanged)` 而非 `pr.GetScore()` —— 见 [Vector 接口](/zh/api/vector/interface#getprivilegesrequiredscore)。
+:::
 
 ## 向量验证
 
@@ -289,28 +281,27 @@ func groupVectorsByType(vectors []vector.Vector) map[string][]vector.Vector {
 
 ### 自定义向量
 
+实现自定义指标时，嵌入 `*vector.VectorImpl` —— 它已提供全部 `Vector` 接口方法，你只需填字段：
+
 ```go
-// 自定义向量实现
+// 由 VectorImpl 支撑的自定义向量实现
 type CustomVector struct {
-    groupName   string
-    shortName   string
-    longName    string
-    shortValue  rune
-    longValue   string
-    description string
-    score       float64
+    *vector.VectorImpl
 }
 
-func (c *CustomVector) GetGroupName() string { return c.groupName }
-func (c *CustomVector) GetShortName() string { return c.shortName }
-func (c *CustomVector) GetLongName() string { return c.longName }
-func (c *CustomVector) GetShortValue() rune { return c.shortValue }
-func (c *CustomVector) GetLongValue() string { return c.longValue }
-func (c *CustomVector) GetDescription() string { return c.description }
-func (c *CustomVector) GetScore() float64 { return c.score }
-func (c *CustomVector) String() string {
-    return fmt.Sprintf("%s:%c", c.shortName, c.shortValue)
+cv := &CustomVector{
+    VectorImpl: &vector.VectorImpl{
+        GroupName:   "Base Metrics",
+        ShortName:   "AV",
+        LongName:    "Attack Vector",
+        ShortValue:  'N',
+        LongValue:   "Network",
+        Description: "custom",
+        Score:       0.85,
+    },
 }
+fmt.Println(cv.String())        // AV:N
+fmt.Println(cv.IsNotDefined())  // false
 ```
 
 ### 向量注册表
@@ -367,23 +358,9 @@ func setCachedVector(key string, v vector.Vector) {
 }
 ```
 
-### 对象池
+### 无需对象池
 
-```go
-var vectorPool = sync.Pool{
-    New: func() interface{} {
-        return &vector.AttackVectorNetwork{}
-    },
-}
-
-func getVectorFromPool() vector.Vector {
-    return vectorPool.Get().(vector.Vector)
-}
-
-func putVectorToPool(v vector.Vector) {
-    vectorPool.Put(v)
-}
-```
+预定义单例是不可变的包级值，被所有调用方共享 —— 没有可池化的对象。工厂函数解析取值只是返回已有单例的廉价 `switch`，每次调用本质上只是一次指针拷贝。不要把它们包进 `sync.Pool`；直接调用 `vector.GetAttackVector('N')` 或引用 `vector.AttackVectorNetwork` 即可。
 
 ## 最佳实践
 
@@ -411,11 +388,20 @@ func safeGetScore(v vector.Vector) float64 {
 
 ### 3. 接口组合
 
+`Vector` 接口是有意保持扁平的 —— 它不拆分为子接口。若需更窄的视图（例如仅评分方法），在自己的代码中定义本地接口并断言：
+
 ```go
-type CVSSVector interface {
-    vector.Vector
-    IsRequired() bool
-    GetCategory() string
+// 应用特定的更窄接口
+type Scorer interface {
+    GetScore() float64
+    IsNotDefined() bool
+}
+
+func scoreOf(s Scorer) float64 {
+    if s.IsNotDefined() {
+        return 1.0 // 无操作权重
+    }
+    return s.GetScore()
 }
 ```
 
