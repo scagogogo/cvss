@@ -38,8 +38,7 @@ If you're new to CVSS Skills, we recommend learning in the following order:
 #### Vector Parsing
 ```go
 // Parse a basic CVSS vector
-parser := parser.NewCvss3xParser("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
-vector, err := parser.Parse()
+vector, err := parser.ParseString("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
 if err != nil {
     log.Fatal(err)
 }
@@ -79,8 +78,7 @@ vectors := []string{
 }
 
 for _, vectorStr := range vectors {
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, err := parser.Parse()
+    vector, err := parser.ParseString(vectorStr)
     if err != nil {
         fmt.Printf("Error parsing %s: %v\n", vectorStr, err)
         continue
@@ -101,7 +99,7 @@ for _, vectorStr := range vectors {
 // Calculate distance between vectors
 calc := cvss.NewDistanceCalculator(vector1, vector2)
 distance := calc.EuclideanDistance()
-similarity := calc.CosineSimilarity()
+similarity := calc.JaccardSimilarity()
 
 fmt.Printf("Distance: %.3f\n", distance)
 fmt.Printf("Similarity: %.3f\n", similarity)
@@ -158,15 +156,14 @@ func safeParseVector(vectorStr string) (*cvss.Cvss3x, error) {
     }
     
     // Parse with error handling
-    parser := parser.NewCvss3xParser(vectorStr)
-    vector, err := parser.Parse()
+    vector, err := parser.ParseString(vectorStr)
     if err != nil {
         return nil, fmt.Errorf("parse failed: %w", err)
     }
-    
-    // Validation
-    if !vector.IsValid() {
-        return nil, fmt.Errorf("parsed vector is invalid")
+
+    // Validation (Check returns the first missing/invalid metric)
+    if err := vector.Check(); err != nil {
+        return nil, fmt.Errorf("parsed vector is invalid: %w", err)
     }
     
     return vector, nil
@@ -176,20 +173,16 @@ func safeParseVector(vectorStr string) (*cvss.Cvss3x, error) {
 ### Error Recovery
 ```go
 func parseWithFallback(vectorStr string) (*cvss.Cvss3x, error) {
-    // Try strict parsing first
-    parser := parser.NewCvss3xParser(vectorStr)
-    parser.SetStrictMode(true)
-    
-    vector, err := parser.Parse()
+    // Try strict parsing first (ParseString enforces the CVSS: prefix
+    // and rejects unknown metrics/values)
+    vector, err := parser.ParseString(vectorStr)
     if err == nil {
         return vector, nil
     }
-    
-    // Fall back to tolerant parsing
-    parser.SetStrictMode(false)
-    parser.SetAllowMissingMetrics(true)
-    
-    return parser.Parse()
+
+    // Fall back to relaxed parsing: accepts inputs without the CVSS:3.x/
+    // prefix and fills in the requested default version
+    return parser.ParseRelaxed(vectorStr, "3.1")
 }
 ```
 
@@ -206,24 +199,23 @@ func processVectorsConcurrently(vectors []string) []Result {
         go func(index int, vector string) {
             defer wg.Done()
             
-            parser := parser.NewCvss3xParser(vector)
-            cvssVector, err := parser.Parse()
+            cvssVector, err := parser.ParseString(vector)
             if err != nil {
                 results[index] = Result{Error: err}
                 return
             }
-            
+
             calculator := cvss.NewCalculator(cvssVector)
             score, err := calculator.Calculate()
             if err != nil {
                 results[index] = Result{Error: err}
                 return
             }
-            
+
             results[index] = Result{
-                Vector: cvssVector,
-                Score:  score,
-                Severity: calculator.GetSeverityRating(score),
+                Vector:   cvssVector,
+                Score:    score,
+                Severity: calculator.GetSeverityRating(score).String(),
             }
         }(i, vectorStr)
     }
@@ -242,19 +234,11 @@ type Result struct {
 
 ### Memory Optimization
 ```go
-// Use object pools for high-frequency operations
-var parserPool = sync.Pool{
-    New: func() interface{} {
-        return parser.NewCvss3xParser("")
-    },
-}
-
-func parseWithPool(vectorStr string) (*cvss.Cvss3x, error) {
-    parser := parserPool.Get().(*parser.Cvss3xParser)
-    defer parserPool.Put(parser)
-    
-    parser.SetVector(vectorStr)
-    return parser.Parse()
+// Cvss3xParser binds its input string at construction and cannot be
+// rebound, so an object pool gains nothing. Just call ParseString per
+// input — each call constructs a fresh, cheap parser.
+func parsePerCall(vectorStr string) (*cvss.Cvss3x, error) {
+    return parser.ParseString(vectorStr)
 }
 ```
 
