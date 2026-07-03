@@ -809,11 +809,11 @@ func runEdgeCaseTestSuite() {
 掌握边缘情况处理后，您可以探索：
 
 - [性能优化](/zh/examples/performance) - 高级优化技术
-- [生产部署](/zh/examples/edge-cases) - 企业部署模式
+- [生产部署](/zh/examples/production) - 企业部署模式
 - [监控和告警](/zh/examples/monitoring) - 生产监控策略
 
 ## 相关文档
 
-- [错误处理指南](/zh/api/cvss/) - 全面的错误处理
-- [性能指南](/zh/examples/performance) - 性能优化
-- [测试指南](/zh/api/cvss/) - 测试策略和最佳实践
+- [错误处理指南](/zh/api/error-handling) - 全面的错误处理
+- [性能指南](/zh/api/performance) - 性能优化
+- [测试指南](/zh/api/testing) - 测试策略和最佳实践

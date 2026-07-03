@@ -449,7 +449,7 @@ func modifyVector(original *cvss.Cvss3x) *cvss.Cvss3x {
 
 ## 相关文档
 
-- [Calculator 计算器](/zh/api/cvss/calculator)
-- [Vector 接口](/zh/api/vector/interface)
-- [Parser 解析器](/zh/api/parser/cvss3x-parser)
-- [使用示例](/zh/examples/basic)
+- [Calculator 计算器](/zh/api/cvss/calculator) - 评分计算
+- [DistanceCalculator 距离计算](/zh/api/cvss/distance) - 向量比较
+- [JSON 支持](/zh/api/cvss/json) - 序列化
+- [Parser 解析器](/zh/api/parser/cvss3x-parser) - 字符串解析

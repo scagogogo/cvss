@@ -692,4 +692,4 @@ func prioritizeVulnerabilities(vulnerabilities []*cvss.Cvss3x, criticalThreshold
 
 - [距离计算器 API](/zh/api/cvss/distance) - 详细 API 参考
 - [向量比较指南](/zh/examples/comparison) - 比较技术
-- [聚类算法](/zh/examples/edge-cases) - 高级聚类方法
+- [生产部署](/zh/examples/production) - 部署模式

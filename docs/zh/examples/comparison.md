@@ -715,6 +715,6 @@ func testComparisonAccuracy() {
 
 ## 相关文档
 
-- [向量比较 API](/zh/api/cvss/) - 详细 API 参考
+- [向量比较 API](/zh/api/cvss/comparison) - 详细 API 参考
 - [距离计算器](/zh/api/cvss/distance) - 数学比较方法
 - [风险评估指南](/zh/examples/risk-assessment) - 全面的风险分析

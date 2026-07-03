@@ -317,3 +317,4 @@ func TestValidationReportsMissingMetrics(t *testing.T) {
 - [解析器参考](/zh/api/parser/cvss3x-parser) - `ErrParserMagicHead`、`ErrDuplicateMetric`、批量辅助函数
 - [Cvss3x 数据结构](/zh/api/cvss/cvss3x) - `Check()` / `Validate()` / `MissingMetrics()`
 - [计算器](/zh/api/cvss/calculator) - `Calculate()` 与评分错误路径
+- [测试指南](/zh/api/testing) - 错误测试策略

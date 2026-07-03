@@ -246,8 +246,8 @@ fmt.Printf("攻击复杂性评分: %.2f\n", cvss3x.Cvss3xBase.AttackComplexity.G
 
 - [解析向量](/zh/examples/parsing) - 学习解析不同格式的向量
 - [JSON 输出](/zh/examples/json) - 了解数据序列化
-- [时间指标](/zh/examples/temporal) - 探索时间指标的使用
-- [距离计算](/zh/examples/distance) - 学习向量分析功能
+- [距离计算](/zh/examples/distance) - 学习向量比较功能
+- [高级示例](/zh/examples/edge-cases) - 错误处理和边缘情况
 
 ## 相关文档
 

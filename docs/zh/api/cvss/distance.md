@@ -421,5 +421,6 @@ func safeDistanceCalculation(v1, v2 *cvss.Cvss3x) (float64, error) {
 ## 相关文档
 
 - [CVSS 数据结构](/zh/api/cvss/cvss3x) - 了解 CVSS 向量结构
-- [距离计算示例](/zh/examples/distance) - 详细使用示例
-- [向量比较](/zh/examples/comparison) - 向量比较方法
+- [Calculator 计算器](/zh/api/cvss/calculator) - 评分计算
+- [距离计算示例](/zh/examples/distance) - 含层次聚类与并行距离矩阵
+- [向量比较](/zh/examples/comparison) - 跨向量集合的比较

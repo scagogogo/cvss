@@ -74,99 +74,200 @@ fmt.Printf("Euclidean distance: %.3f\n", euclidean)
 fmt.Printf("Manhattan distance: %.3f\n", manhattan)
 ```
 
-## 功能特性
+## Main Features
 
-### 🎯 完整的 CVSS 支持
+### 🧮 Score Calculation
 
-- **CVSS 3.0/3.1**: 完全支持两个版本
-- **所有指标**: 基础、时间、环境指标
-- **精确计算**: 严格按照官方规范
+- **Base score**: CVSS base score from base metrics
+- **Temporal score**: Score adjustment accounting for temporal factors
+- **Environmental score**: Final score based on environmental factors
 
-### 📊 高级分析
+### 📊 Vector Analysis
 
-- **距离计算**: 多种距离算法
-- **相似度分析**: 向量相似度评估
-- **批量处理**: 高效的批量计算
+- **Distance calculation**: Distance between two vectors
+- **Similarity analysis**: Assess how similar two vectors are
+- **Vector comparison**: Multi-dimensional vector comparison
 
-### 🔧 开发者友好
+### 🔧 Data Handling
 
-- **类型安全**: 强类型 API 设计
-- **零依赖**: 纯 Go 实现
-- **高性能**: 优化的计算算法
+- **JSON serialization**: Full JSON support
+- **Vector validation**: Ensure vectors are valid
+- **Error handling**: Detailed error information
 
-## 包结构
+## Package Structure
 
 ```
 cvss/
-├── cvss3x.go              # 主要数据结构
-├── cvss3x_base.go         # 基础指标
-├── cvss3x_temporal.go     # 时间指标
-├── cvss3x_environmental.go # 环境指标
-├── calculator.go          # 评分计算器
-├── distance.go           # 距离计算器
-└── json.go               # JSON 支持
+├── calculator.go          # Score calculator
+├── cvss3x.go             # CVSS 3.x data structure
+├── distance.go           # Distance calculator
+├── json.go               # JSON support
+├── errors.go             # Error definitions
+└── utils.go              # Utility functions
 ```
 
-## 设计模式
+## Type Definitions
 
-### 组合模式
-CVSS 向量使用组合模式，将不同类型的指标组合在一起：
+### Calculator
 
-```go
-type Cvss3x struct {
-    *Cvss3xBase          // 基础指标
-    *Cvss3xTemporal      // 时间指标
-    *Cvss3xEnvironmental // 环境指标
-    
-    MajorVersion int     // 主版本号
-    MinorVersion int     // 次版本号
-}
-```
-
-### 策略模式
-不同的计算算法使用策略模式实现：
+`Calculator` is a struct (not an interface), constructed with the `*Cvss3x` to be scored:
 
 ```go
-// 基础评分计算
-func (c *Calculator) calculateBaseScore() float64 {
-    if c.isChangedScope() {
-        return c.calculateChangedScopeScore()
-    }
-    return c.calculateUnchangedScopeScore()
-}
-```
+type Calculator struct { /* unexported: holds *Cvss3x */ }
 
-### 工厂模式
-提供便捷的构造函数：
-
-```go
-// 创建新的 CVSS 向量
-func NewCvss3x() *Cvss3x
-
-// 创建计算器
 func NewCalculator(cvss *Cvss3x) *Calculator
-
-// 创建距离计算器
-func NewDistanceCalculator(v1, v2 *Cvss3x) *DistanceCalculator
+func (c *Calculator) Calculate() (float64, error)
+func (c *Calculator) GetBaseScore() (float64, error)
+func (c *Calculator) GetTemporalScore() (float64, error)
+func (c *Calculator) GetEnvironmentalScore() (float64, error)
+func (c *Calculator) GetSeverityRating(score float64) Severity // Severity is a named string type
 ```
 
-## 性能考虑
+### DistanceCalculator
 
-### 内存效率
-- 使用指针避免不必要的复制
-- 延迟初始化可选指标
-- 最小化内存分配
+`DistanceCalculator` is likewise a struct (not an interface), holding two `*Cvss3x`:
 
-### 计算优化
-- 缓存中间计算结果
-- 避免重复计算
-- 使用高效的数学运算
+```go
+func NewDistanceCalculator(vector1, vector2 *Cvss3x) *DistanceCalculator
+func (dc *DistanceCalculator) EuclideanDistance() float64
+func (dc *DistanceCalculator) ManhattanDistance() float64
+func (dc *DistanceCalculator) HammingDistance() int
+func (dc *DistanceCalculator) JaccardSimilarity() float64
+func (dc *DistanceCalculator) ScoreDifference() float64
+```
 
-## 下一步
+## Common Patterns
 
-深入了解具体功能：
+### 1. Basic Usage Pattern
 
-- 📖 [Cvss3x 数据结构](/api/cvss/cvss3x)
-- 🧮 [Calculator 评分计算](/api/cvss/calculator)
-- 📏 [DistanceCalculator 距离计算](/api/cvss/distance)
-- 📄 [JSON 支持](/api/cvss/json)
+```go
+// Parse -> Calculate -> Output
+vector, err := parser.ParseString(vectorString)
+if err != nil {
+    return err
+}
+
+calculator := cvss.NewCalculator(vector)
+score, err := calculator.Calculate()
+if err != nil {
+    return err
+}
+
+fmt.Printf("Score: %.1f (%s)\n", score, calculator.GetSeverityRating(score))
+```
+
+### 2. Batch Processing Pattern
+
+```go
+func processBatch(vectors []string) []Result {
+    var results []Result
+
+    for _, vectorStr := range vectors {
+        vector, err := parser.ParseString(vectorStr)
+        if err != nil {
+            continue
+        }
+
+        calculator := cvss.NewCalculator(vector)
+        score, err := calculator.Calculate()
+        if err != nil {
+            continue
+        }
+
+        results = append(results, Result{
+            Vector:   vectorStr,
+            Score:    score,
+            Severity: calculator.GetSeverityRating(score),
+        })
+    }
+
+    return results
+}
+```
+
+### 3. Vector Comparison Pattern
+
+```go
+func compareVectors(v1, v2 string) ComparisonResult {
+    vector1, _ := parser.ParseString(v1)
+    vector2, _ := parser.ParseString(v2)
+
+    calc1 := cvss.NewCalculator(vector1)
+    calc2 := cvss.NewCalculator(vector2)
+
+    score1, _ := calc1.Calculate()
+    score2, _ := calc2.Calculate()
+
+    distCalc := cvss.NewDistanceCalculator(vector1, vector2)
+    distance := distCalc.EuclideanDistance()
+
+    return ComparisonResult{
+        Score1:      score1,
+        Score2:      score2,
+        Distance:    distance,
+        MoreSevere:  score1 > score2,
+    }
+}
+```
+
+## Performance Characteristics
+
+### ⚡ High Performance
+
+- **Zero-allocation calculation**: Optimized algorithms reduce memory allocation
+- **Concurrency safe**: All calculators are concurrency-safe
+- **Cache friendly**: Data structures designed with cache efficiency in mind
+
+### 📈 Scalability
+
+- **Plugin architecture**: Supports custom calculators
+- **Interface design**: Easy to extend and test
+- **Modular**: Functionality is modular, use as needed
+
+## Best Practices
+
+### 1. Error Handling
+
+```go
+calculator := cvss.NewCalculator(vector)
+score, err := calculator.Calculate()
+if err != nil {
+    // Calculate returns a plain error via Check() (the first missing/invalid metric)
+    log.Printf("Calculation failed (vector incomplete): %v", err)
+    return
+}
+```
+
+### 2. Resource Management
+
+`Calculator` binds its vector at construction and has no `SetVector` method, so it **cannot** be reused via an object pool. Construct a fresh `Calculator` for each scoring (the cost is tiny); for batch scoring, just loop and construct:
+
+```go
+func calculateScore(vector *cvss.Cvss3x) (float64, error) {
+    calc := cvss.NewCalculator(vector)
+    return calc.Calculate()
+}
+```
+
+### 3. Performance Monitoring
+
+```go
+func calculateWithMetrics(vector *cvss.Cvss3x) (float64, error) {
+    start := time.Now()
+    defer func() {
+        duration := time.Since(start)
+        metrics.RecordCalculationTime(duration)
+    }()
+
+    calculator := cvss.NewCalculator(vector)
+    return calculator.Calculate()
+}
+```
+
+## Related Documentation
+
+- [Calculator](/api/cvss/calculator) - Detailed calculator documentation
+- [Cvss3x Data Structure](/api/cvss/cvss3x) - Understanding the data structure
+- [DistanceCalculator](/api/cvss/distance) - Vector distance calculation
+- [JSON Support](/api/cvss/json) - Serialization
+- [Usage Examples](/examples/) - Practical examples

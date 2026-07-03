@@ -448,5 +448,6 @@ func concurrentCalculation(vectors []*cvss.Cvss3x) []float64 {
 ## Related Documentation
 
 - [Cvss3x Data Structure](/api/cvss/cvss3x)
+- [DistanceCalculator](/api/cvss/distance)
 - [Usage Examples](/examples/basic)
 - [CVSS Specification](https://www.first.org/cvss/v3.1/specification-document)

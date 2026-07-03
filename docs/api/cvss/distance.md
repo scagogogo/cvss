@@ -614,5 +614,5 @@ func safeCalculateDistance(v1, v2 *cvss.Cvss3x) (float64, error) {
 
 - [Cvss3x Data Structure](/api/cvss/cvss3x)
 - [Calculator](/api/cvss/calculator)
-- [Usage Examples](/examples/distance)
-- [Clustering Examples](/examples/production)
+- [Usage Examples](/examples/distance) - Includes hierarchical clustering and parallel distance matrix
+- [Vector Comparison](/examples/comparison) - Comparing vectors across a fleet
