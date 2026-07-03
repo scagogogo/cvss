@@ -20,9 +20,15 @@ CVSS Skills supports parsing CVSS 3.0 and 3.1 vector strings in various formats 
 package main
 
 import (
+    "bufio"
+    "errors"
     "fmt"
     "log"
+    "os"
+    "strings"
+    "sync"
 
+    "github.com/scagogogo/cvss-skills/pkg/cvss"
     "github.com/scagogogo/cvss-skills/pkg/parser"
 )
 

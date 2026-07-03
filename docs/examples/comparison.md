@@ -22,6 +22,8 @@ package main
 import (
     "fmt"
     "log"
+    "sort"
+    "strings"
 
     "github.com/scagogogo/cvss-skills/pkg/cvss"
     "github.com/scagogogo/cvss-skills/pkg/parser"

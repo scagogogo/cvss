@@ -20,9 +20,15 @@ CVSS Skills 支持解析各种格式和配置的 CVSS 3.0 和 3.1 向量字符�
 package main
 
 import (
+    "bufio"
+    "errors"
     "fmt"
     "log"
+    "os"
+    "strings"
+    "sync"
 
+    "github.com/scagogogo/cvss-skills/pkg/cvss"
     "github.com/scagogogo/cvss-skills/pkg/parser"
 )
 

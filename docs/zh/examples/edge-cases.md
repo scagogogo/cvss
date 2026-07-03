@@ -21,9 +21,14 @@
 package main
 
 import (
+    "context"
     "fmt"
+    "runtime"
     "strings"
+    "sync"
+    "time"
 
+    "github.com/scagogogo/cvss-skills/pkg/cvss"
     "github.com/scagogogo/cvss-skills/pkg/parser"
 )
 

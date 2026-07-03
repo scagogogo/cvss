@@ -20,9 +20,15 @@ CVSS Skills 为以下功能提供全面的 JSON 支持：
 package main
 
 import (
+    "context"
     "encoding/json"
     "fmt"
+    "io"
     "log"
+    "net/http"
+    "os"
+    "strings"
+    "time"
 
     "github.com/scagogogo/cvss-skills/pkg/cvss"
     "github.com/scagogogo/cvss-skills/pkg/parser"

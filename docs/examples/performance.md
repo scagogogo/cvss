@@ -365,9 +365,18 @@ func (cp *CachedProcessor) ProcessVector(vectorStr string) (float64, error) {
 ### CPU Profiling
 
 ```go
+package main
+
 import (
+    "log"
     "os"
+    "runtime"
     "runtime/pprof"
+    "sync"
+    "time"
+
+    "github.com/scagogogo/cvss-skills/pkg/cvss"
+    "github.com/scagogogo/cvss-skills/pkg/parser"
 )
 
 func ProfileCPU(filename string, fn func()) error {
