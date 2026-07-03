@@ -655,6 +655,74 @@ func validateEnvironmentalMetrics(vector *cvss.Cvss3x) []string {
 }
 ```
 
+### 环境场景测试
+
+```go
+func testEnvironmentalScenarios() {
+    testCases := []struct {
+        name        string
+        vector      string
+        expectError bool
+        minScore    float64
+        maxScore    float64
+    }{
+        {
+            "仅高需求",
+            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/CR:H/IR:H/AR:H",
+            false,
+            9.0,
+            10.0,
+        },
+        {
+            "仅低需求",
+            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/CR:L/IR:L/AR:L",
+            false,
+            5.0,
+            8.0,
+        },
+        {
+            "强控制",
+            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/CR:H/IR:H/AR:H/MAV:L/MAC:H/MPR:H/MUI:R/MC:L/MI:L/MA:L",
+            false,
+            2.0,
+            5.0,
+        },
+    }
+
+    fmt.Println("=== 环境场景测试 ===")
+
+    for _, tc := range testCases {
+        fmt.Printf("\n测试: %s\n", tc.name)
+        fmt.Printf("向量: %s\n", tc.vector)
+
+        vector, err := parser.ParseString(tc.vector)
+
+        if tc.expectError {
+            if err != nil {
+                fmt.Printf("✓ 预期错误: %v\n", err)
+            } else {
+                fmt.Printf("✗ 预期错误但解析成功\n")
+            }
+        } else {
+            if err != nil {
+                fmt.Printf("✗ 意外错误: %v\n", err)
+            } else {
+                calculator := cvss.NewCalculator(vector)
+                score, _ := calculator.Calculate()
+
+                if score >= tc.minScore && score <= tc.maxScore {
+                    fmt.Printf("✓ 评分 %.1f 在预期区间 [%.1f-%.1f] 内\n",
+                        score, tc.minScore, tc.maxScore)
+                } else {
+                    fmt.Printf("✗ 评分 %.1f 超出预期区间 [%.1f-%.1f]\n",
+                        score, tc.minScore, tc.maxScore)
+                }
+            }
+        }
+    }
+}
+```
+
 ## 下一步
 
 掌握环境指标后，您可以探索：

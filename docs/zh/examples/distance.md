@@ -296,6 +296,86 @@ func demonstrateClustering() {
 }
 ```
 
+### 层次聚类
+
+```go
+func hierarchicalClustering(vectors []*cvss.Cvss3x) {
+    n := len(vectors)
+
+    // 计算距离矩阵
+    distances := make([][]float64, n)
+    for i := range distances {
+        distances[i] = make([]float64, n)
+    }
+
+    for i := 0; i < n; i++ {
+        for j := 0; j < n; j++ {
+            if i == j {
+                distances[i][j] = 0
+            } else {
+                calc := cvss.NewDistanceCalculator(vectors[i], vectors[j])
+                distances[i][j] = calc.EuclideanDistance()
+            }
+        }
+    }
+
+    // 简单层次聚类（单链接）
+    clusters := make([][]int, n)
+    for i := range clusters {
+        clusters[i] = []int{i}
+    }
+
+    fmt.Println("层次聚类步骤:")
+    step := 1
+
+    for len(clusters) > 1 {
+        minDist := math.Inf(1)
+        var mergeI, mergeJ int
+
+        // 查找最近的簇
+        for i := 0; i < len(clusters); i++ {
+            for j := i + 1; j < len(clusters); j++ {
+                dist := clusterDistance(clusters[i], clusters[j], distances)
+                if dist < minDist {
+                    minDist = dist
+                    mergeI, mergeJ = i, j
+                }
+            }
+        }
+
+        fmt.Printf("步骤 %d: 合并簇 %v 和 %v（距离: %.3f）\n",
+            step, clusters[mergeI], clusters[mergeJ], minDist)
+
+        // 合并簇
+        newCluster := append(clusters[mergeI], clusters[mergeJ]...)
+        newClusters := [][]int{newCluster}
+
+        for i, cluster := range clusters {
+            if i != mergeI && i != mergeJ {
+                newClusters = append(newClusters, cluster)
+            }
+        }
+
+        clusters = newClusters
+        step++
+    }
+}
+
+func clusterDistance(cluster1, cluster2 []int, distances [][]float64) float64 {
+    minDist := math.Inf(1)
+
+    for _, i := range cluster1 {
+        for _, j := range cluster2 {
+            if distances[i][j] < minDist {
+                minDist = distances[i][j]
+            }
+        }
+    }
+
+    return minDist
+}
+```
+
 ## 相似性分析
 
 ### 查找相似向量
@@ -522,6 +602,42 @@ func (b *BatchDistanceCalculator) GetDistance(i, j int, algorithm string) float6
     b.mutex.Unlock()
 
     return distance
+}
+```
+
+### 并行距离矩阵
+
+```go
+func calculateDistanceMatrixParallel(vectors []*cvss.Cvss3x) [][]float64 {
+    n := len(vectors)
+    matrix := make([][]float64, n)
+
+    for i := range matrix {
+        matrix[i] = make([]float64, n)
+    }
+
+    var wg sync.WaitGroup
+
+    for i := 0; i < n; i++ {
+        for j := i; j < n; j++ {
+            wg.Add(1)
+            go func(row, col int) {
+                defer wg.Done()
+
+                if row == col {
+                    matrix[row][col] = 0.0
+                } else {
+                    calc := cvss.NewDistanceCalculator(vectors[row], vectors[col])
+                    distance := calc.EuclideanDistance()
+                    matrix[row][col] = distance
+                    matrix[col][row] = distance // 对称矩阵
+                }
+            }(i, j)
+        }
+    }
+
+    wg.Wait()
+    return matrix
 }
 ```
 
