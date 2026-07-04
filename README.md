@@ -10,6 +10,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub Release](https://img.shields.io/github/v/release/scagogogo/cvss-skills)](https://github.com/scagogogo/cvss-skills/releases/latest)
 
+**🌐 Website**: [scagogogo.github.io/cvss-skills](https://scagogogo.github.io/cvss-skills/) — Full documentation, tutorials, API reference
+
 **Languages**: English | [简体中文](README_zh.md)
 
 </div>
@@ -24,14 +26,33 @@
 
 It is delivered through **4 integration methods**:
 
+```mermaid
+flowchart LR
+    subgraph Methods["Integration Methods"]
+        direction TB
+        S["🤖 Skills<br/>Claude Code"]
+        SDK["📦 Go SDK<br/>go get"]
+        CLI["💻 CLI<br/>pre-built"]
+        MCP["🔌 MCP Server<br/>AI agents"]
+    end
+
+    S -->|natural language| U(["User"])
+    SDK -->|library| A(["App"])
+    CLI -->|scripts| B(["Batch"])
+    MCP -->|protocol| C(["Agent"])
+
+    classDef m fill:#e6f4ff,stroke:#1677ff,color:#003a8c
+    classDef u fill:#f6ffed,stroke:#52c41a,color:#135200
+    class S,SDK,CLI,MCP m
+    class U,A,B,C u
+```
+
 | | Integration | Best For | Install |
 |---|---|---|---|
 | 🤖 | **Skills** (Claude Code) | Interactive analysis, natural language | `claude mcp add --scope user cvss-skills -- https://github.com/scagogogo/cvss-skills` |
 | 📦 | **Go SDK** | Building security tools in Go | `go get github.com/scagogogo/cvss-skills@latest` |
 | 💻 | **CLI** | Scripting, batch processing | see [Pre-built Binaries](#-pre-built-binaries) |
 | 🔌 | **MCP** | AI agent integration | add this repo as an MCP server |
-
-![Integration Methods](docs/images/integration-methods.png)
 
 **Repository facts**
 
@@ -90,7 +111,45 @@ flowchart LR
 
 ## ✨ Feature Map
 
-![Feature Map](docs/images/feature-map.png)
+```mermaid
+mindmap
+  root((CVSS Skills))
+    Parsing
+      v3.0 / v3.1 vectors
+      Relaxed parsing
+      ParseAndScore
+      Builder API
+      FromMap
+    Scoring
+      Base / Temporal / Environmental
+      Severity ratings
+      Per-metric breakdown
+    Validation
+      Structural checks
+      ValidationErrors
+      IsComplete
+      MissingMetrics
+    Comparison
+      Diff
+      Merge
+      Equal / SameSeverity
+    Distance
+      Euclidean
+      Manhattan
+      Hamming
+      Jaccard
+    Serialization
+      JSON
+      Text
+      CSV I/O
+      Batch
+    Advanced
+      Sensitivity analysis
+      Score range
+      Version-aware
+      Presets
+      Mock generators
+```
 
 | Category | Features |
 |----------|----------|
@@ -226,9 +285,46 @@ go build -o cvss ./cmd/cvss-cli/
 
 ## 🧮 CVSS Vector Structure
 
-![Vector Structure](docs/images/vector-structure.png)
-
 A CVSS vector consists of up to **3 layers** of metrics:
+
+```mermaid
+flowchart LR
+    Prefix["CVSS:3.1<br/>version prefix"] --> Base
+
+    subgraph Base["Base — required (8 metrics)"]
+        direction LR
+        AV["AV<br/>Attack Vector"]
+        AC["AC<br/>Complexity"]
+        PR["PR<br/>Privileges"]
+        UI["UI<br/>User Inter."]
+        S["S<br/>Scope"]
+        C["C<br/>Confidential."]
+        I["I<br/>Integrity"]
+        A["A<br/>Availability"]
+    end
+
+    subgraph Temporal["Temporal — optional"]
+        direction LR
+        E["E<br/>Exploit"]
+        RL["RL<br/>Remediation"]
+        RC["RC<br/>Report Conf."]
+    end
+
+    subgraph Env["Environmental — optional"]
+        direction LR
+        CR["CR/IR/AR<br/>Requirements"]
+        M["MAV…MA<br/>Modified base"]
+    end
+
+    Base --> Temporal --> Env
+
+    classDef base fill:#e6f4ff,stroke:#1677ff,color:#003a8c
+    classDef temp fill:#fffbe6,stroke:#faad14,color:#874d00
+    classDef env fill:#f9f0ff,stroke:#722ed1,color:#391085
+    class AV,AC,PR,UI,S,C,I,A base
+    class E,RL,RC temp
+    class CR,M env
+```
 
 | Layer | Metrics | Required |
 |-------|---------|----------|
@@ -239,8 +335,6 @@ A CVSS vector consists of up to **3 layers** of metrics:
 ---
 
 ## 🎚️ Severity Scale
-
-![Severity Gauge](docs/images/severity-gauge.png)
 
 | Rating | Score Range | Color |
 |--------|------------|-------|
@@ -258,6 +352,17 @@ flowchart LR
     D -->|"4.0–6.9"| M["Medium"]
     D -->|"7.0–8.9"| H["High"]
     D -->|"9.0–10.0"| Cr["Critical"]
+
+    classDef none fill:#f0f0f0,stroke:#8c8c8c,color:#262626
+    classDef low fill:#f6ffed,stroke:#52c41a,color:#135200
+    classDef med fill:#fffbe6,stroke:#faad14,color:#874d00
+    classDef high fill:#fff7e6,stroke:#fa8c16,color:#873800
+    classDef crit fill:#fff1f0,stroke:#ff4d4f,color:#a8071a
+    class N none
+    class L low
+    class M med
+    class H high
+    class Cr crit
 ```
 
 ---
