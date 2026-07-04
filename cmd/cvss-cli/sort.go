@@ -17,13 +17,18 @@ var sortCmd = &cobra.Command{
 Default sort order is descending (highest score first).
 Use --asc for ascending order.
 
+Flags:
+  --format  Output format: text (default), json
+
 Examples:
   cvss sort vectors.txt
   cat vectors.txt | cvss sort -
-  cvss sort --asc vectors.txt`,
+  cvss sort --asc vectors.txt
+  cvss sort --format json vectors.txt`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		asc, _ := cmd.Flags().GetBool("asc")
+		format, _ := cmd.Flags().GetString("format")
 
 		lines := readLines(cmd, args)
 		if len(lines) == 0 {
@@ -50,6 +55,24 @@ Examples:
 		}
 		slice.Sort()
 
+		if format == "json" {
+			items := make([]map[string]interface{}, 0, len(slice.Items()))
+			for _, cv := range slice.Items() {
+				calc := cvss.NewCalculator(cv)
+				score, _ := calc.Calculate()
+				items = append(items, map[string]interface{}{
+					"score":  score,
+					"vector": cv.String(),
+				})
+			}
+			out := map[string]interface{}{
+				"items": items,
+				"asc":   asc,
+			}
+			fmt.Println(marshalJSON(out))
+			return
+		}
+
 		for _, cv := range slice.Items() {
 			calc := cvss.NewCalculator(cv)
 			score, _ := calc.Calculate()
@@ -60,5 +83,6 @@ Examples:
 
 func init() {
 	sortCmd.Flags().Bool("asc", false, "sort ascending (lowest score first)")
+	sortCmd.Flags().String("format", "text", "output format: text or json")
 	rootCmd.AddCommand(sortCmd)
 }

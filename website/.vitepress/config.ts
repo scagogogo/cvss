@@ -99,10 +99,23 @@ function nav() {
     { text: 'Go SDK', link: '/sdk/', activeMatch: '^/sdk/' },
     { text: 'Metrics', link: '/metrics/', activeMatch: '^/metrics/' },
     { text: 'Concepts', link: '/concepts/', activeMatch: '^/concepts/' },
-    { text: 'Tutorials', link: '/tutorials/', activeMatch: '^/tutorials/' },
-    { text: 'Recipes', link: '/recipes/', activeMatch: '^/recipes/' },
-    { text: 'Downloads', link: '/downloads/' },
-    { text: 'API Reference', link: '/docs/api/' },
+    {
+      text: 'Learn',
+      activeMatch: '^/(tutorials|recipes)/',
+      items: [
+        { text: 'Tutorials', link: '/tutorials/' },
+        { text: 'Recipes', link: '/recipes/' },
+      ],
+    },
+    {
+      text: 'Resources',
+      activeMatch: '^/(downloads|docs)/',
+      items: [
+        { text: 'Downloads', link: '/downloads/' },
+        { text: 'API Reference', link: '/docs/api/' },
+        { text: 'Integration Methods', link: '/integration/' },
+      ],
+    },
     { text: 'GitHub', link: 'https://github.com/scagogogo/cvss-skills' },
   ]
 }
@@ -114,10 +127,23 @@ function navZh() {
     { text: 'Go SDK', link: '/zh/sdk/', activeMatch: '^/zh/sdk/' },
     { text: '指标', link: '/zh/metrics/', activeMatch: '^/zh/metrics/' },
     { text: '概念', link: '/zh/concepts/', activeMatch: '^/zh/concepts/' },
-    { text: '教程', link: '/zh/tutorials/', activeMatch: '^/zh/tutorials/' },
-    { text: '菜谱', link: '/zh/recipes/', activeMatch: '^/zh/recipes/' },
-    { text: '下载', link: '/zh/downloads/' },
-    { text: 'API 参考', link: '/docs/zh/api/' },
+    {
+      text: '学习',
+      activeMatch: '^/zh/(tutorials|recipes)/',
+      items: [
+        { text: '教程', link: '/zh/tutorials/' },
+        { text: '菜谱', link: '/zh/recipes/' },
+      ],
+    },
+    {
+      text: '资源',
+      activeMatch: '^/zh/(downloads|docs)/',
+      items: [
+        { text: '下载', link: '/zh/downloads/' },
+        { text: 'API 参考', link: '/docs/zh/api/' },
+        { text: '集成方式', link: '/zh/integration/' },
+      ],
+    },
     { text: 'GitHub', link: 'https://github.com/scagogogo/cvss-skills' },
   ]
 }

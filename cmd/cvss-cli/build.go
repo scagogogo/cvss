@@ -16,10 +16,14 @@ var buildCmd = &cobra.Command{
 All 8 base metrics are required. Temporal and environmental metrics are optional.
 Use the same short values as in CVSS vector strings (e.g., AV=N, AC=L).
 
+Flags:
+  --format  Output format: text (default), json
+
 Examples:
   cvss build --AV=N --AC=L --PR=N --UI=N --S=U --C=H --I=H --A=H
   cvss build --AV=N --AC=L --PR=N --UI=N --S=U --C=H --I=H --A=H --E=F --RL=T --RC=C
-  cvss build --cvss-version=3.0 --AV=N --AC=L --PR=N --UI=N --S=C --C=H --I=H --A=H`,
+  cvss build --cvss-version=3.0 --AV=N --AC=L --PR=N --UI=N --S=C --C=H --I=H --A=H
+  cvss build --format json --AV=N --AC=L --PR=N --UI=N --S=U --C=H --I=H --A=H`,
 	Run: func(cmd *cobra.Command, args []string) {
 		metrics := map[string]string{
 			"AV": mustGetString(cmd, "AV"),
@@ -54,7 +58,15 @@ Examples:
 			dief("Build error: %v\n", err)
 		}
 
-		fmt.Println(cv.String())
+		format, _ := cmd.Flags().GetString("format")
+		if format == "json" {
+			out := map[string]interface{}{
+				"vectorString": cv.String(),
+			}
+			fmt.Println(marshalJSON(out))
+		} else {
+			fmt.Println(cv.String())
+		}
 	},
 }
 
@@ -88,6 +100,7 @@ func init() {
 	buildCmd.Flags().String("MA", "", "Modified Availability (X/H/L/N)")
 
 	buildCmd.Flags().String("cvss-version", "3.1", "CVSS spec version: 3.0 or 3.1")
+	buildCmd.Flags().String("format", "text", "output format: text or json")
 
 	// Mark base metrics as required
 	for _, name := range []string{"AV", "AC", "PR", "UI", "S", "C", "I", "A"} {
