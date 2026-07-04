@@ -105,7 +105,21 @@ mindmap
 | `cvss base-only`    | 剥离时间/环境指标    | `cvss base-only "CVSS:3.1/..."`（别名 `strip`）                       |
 | `cvss subs`         | 显示影响/可利用子分数| `cvss subs "CVSS:3.1/..."`                                             |
 
-运行 `cvss --help` 查看完整列表，`cvss <命令> --help` 查看单命令选项。
+运行 `cvss --help` 查看完整列表，`cvss <命令> --help` 查看单命令选项。每条命令都有专属详解页——见侧边栏 **CLI 命令** 分组，或直接跳转：
+
+::: details 🔗 各命令详解
+**评分与定级** — [score](/zh/cli/commands/score) · [severity](/zh/cli/commands/severity) · [describe](/zh/cli/commands/describe) · [subs](/zh/cli/commands/subs) · [analyze](/zh/cli/commands/analyze)
+
+**解析与构建** — [parse](/zh/cli/commands/parse) · [build](/zh/cli/commands/build) · [validate](/zh/cli/commands/validate) · [canonicalize](/zh/cli/commands/canonicalize) · [modify](/zh/cli/commands/modify) · [merge](/zh/cli/commands/merge) · [strip / base-only](/zh/cli/commands/strip) · [convert](/zh/cli/commands/convert)
+
+**查看与序列化** — [get](/zh/cli/commands/get) · [groups](/zh/cli/commands/groups) · [map](/zh/cli/commands/map) · [json](/zh/cli/commands/json) · [enumerate](/zh/cli/commands/enumerate)
+
+**比较与度量** — [diff](/zh/cli/commands/diff) · [equal](/zh/cli/commands/equal) · [distance](/zh/cli/commands/distance)
+
+**批量与文件** — [batch score](/zh/cli/commands/batch-score) · [batch validate](/zh/cli/commands/batch-validate) · [sort](/zh/cli/commands/sort) · [csv write](/zh/cli/commands/csv-write) · [csv read](/zh/cli/commands/csv-read)
+
+**生成** — [preset](/zh/cli/commands/preset) · [random](/zh/cli/commands/random) · [range](/zh/cli/commands/range) · [completion](/zh/cli/commands/completion)
+:::
 
 ## JSON 输出
 

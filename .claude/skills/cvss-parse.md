@@ -2,6 +2,8 @@
 
 Parse a CVSS v3.0/v3.1 vector string into structured data.
 
+📖 Full documentation: https://scagogogo.github.io/cvss-skills/sdk/parser
+
 ## CLI Command
 
 ```bash

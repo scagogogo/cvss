@@ -7,8 +7,6 @@ description: 对比使用 CVSS Skills 的四种方式 —— Claude Code Skills�
 
 CVSS Skills 提供 **四种**集成方式，按你的工作流选择。
 
-![集成方式](/images/integration-methods.png)
-
 |          | 集成方式                   | 适用场景                          | 安装                                                                          |
 | -------- | -------------------------- | --------------------------------- | ----------------------------------------------------------------------------- |
 | 🤖       | **Skills**（Claude Code）  | 交互式分析、自然语言              | `claude mcp add --scope user cvss-skills -- https://github.com/scagogogo/cvss-skills` |

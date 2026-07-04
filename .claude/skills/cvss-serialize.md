@@ -2,6 +2,8 @@
 
 Serialize CVSS vectors to various formats: JSON, XML, vector string, map.
 
+📖 Full documentation: https://scagogogo.github.io/cvss-skills/cli/commands/json
+
 ## CLI Command
 
 ```bash

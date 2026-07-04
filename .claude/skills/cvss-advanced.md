@@ -2,6 +2,8 @@
 
 Advanced CVSS v3.x operations: impact analysis, sensitivity, batch processing, enumeration, version conversion.
 
+📖 Full documentation: https://scagogogo.github.io/cvss-skills/tutorials/
+
 ## CLI Commands
 
 ```bash

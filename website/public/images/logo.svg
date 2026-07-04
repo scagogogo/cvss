@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1677ff"/>
+      <stop offset="1" stop-color="#0958d9"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 4 L56 14 V32 C56 46 46 56 32 60 C18 56 8 46 8 32 V14 Z" fill="url(#g)" stroke="#003a8c" stroke-width="1.5"/>
+  <text x="32" y="29" font-family="-apple-system,Segoe UI,Roboto,sans-serif" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">CVSS</text>
+  <text x="32" y="44" font-family="-apple-system,Segoe UI,Roboto,sans-serif" font-size="9" font-weight="600" fill="#e6f4ff" text-anchor="middle">3.1</text>
+</svg>

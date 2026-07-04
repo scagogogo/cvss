@@ -105,7 +105,21 @@ mindmap
 | `cvss base-only`    | Strip temporal/env metrics   | `cvss base-only "CVSS:3.1/..."` (`strip` alias)                        |
 | `cvss subs`         | Show Impact/Exploitability   | `cvss subs "CVSS:3.1/..."`                                             |
 
-Run `cvss --help` for the full list and `cvss <command> --help` for per-command options.
+Run `cvss --help` for the full list and `cvss <command> --help` for per-command options. Each command also has a dedicated deep-dive page — see the sidebar under **CLI Commands**, or jump to a specific one:
+
+::: details 🔗 Per-command deep dives
+**Score & Rate** — [score](/cli/commands/score) · [severity](/cli/commands/severity) · [describe](/cli/commands/describe) · [subs](/cli/commands/subs) · [analyze](/cli/commands/analyze)
+
+**Parse & Build** — [parse](/cli/commands/parse) · [build](/cli/commands/build) · [validate](/cli/commands/validate) · [canonicalize](/cli/commands/canonicalize) · [modify](/cli/commands/modify) · [merge](/cli/commands/merge) · [strip / base-only](/cli/commands/strip) · [convert](/cli/commands/convert)
+
+**Inspect & Serialize** — [get](/cli/commands/get) · [groups](/cli/commands/groups) · [map](/cli/commands/map) · [json](/cli/commands/json) · [enumerate](/cli/commands/enumerate)
+
+**Compare & Measure** — [diff](/cli/commands/diff) · [equal](/cli/commands/equal) · [distance](/cli/commands/distance)
+
+**Batch & Files** — [batch score](/cli/commands/batch-score) · [batch validate](/cli/commands/batch-validate) · [sort](/cli/commands/sort) · [csv write](/cli/commands/csv-write) · [csv read](/cli/commands/csv-read)
+
+**Generate** — [preset](/cli/commands/preset) · [random](/cli/commands/random) · [range](/cli/commands/range) · [completion](/cli/commands/completion)
+:::
 
 ## JSON Output
 

@@ -2,6 +2,8 @@
 
 Calculate CVSS v3.x scores and severity ratings.
 
+📖 Full documentation: https://scagogogo.github.io/cvss-skills/cli/commands/score
+
 ## CLI Commands
 
 ```bash

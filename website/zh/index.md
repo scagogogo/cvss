@@ -5,9 +5,6 @@ hero:
   name: CVSS Skills
   text: CVSS v3.0 / v3.1 工具包
   tagline: 解析、评分、验证、比较与构建漏洞向量 —— 通过 Go SDK、CLI、Claude Code Skills 与 MCP。
-  image:
-    src: /images/integration-methods.png
-    alt: CVSS Skills 的四种集成方式
   actions:
     - theme: brand
       text: 快速开始
@@ -27,7 +24,7 @@ features:
     linkText: 对比各方式 →
   - icon: 🧮
     title: 符合规范的评分
-    details: 基础 / 时间 / 环境评分严格遵循 CVSS v3.0 与 v3.1 规范，包含版本差异（如 UI:R = 0.56 vs 0.62）。
+    details: 基础 / 时间 / 环境评分严格遵循 CVSS v3.0 与 v3.1 规范，包含版本差异（如 UI:R = 0.62 vs 0.56）。
   - icon: ✅
     title: 结构化校验
     details: 逐指标错误报告、完整性检查与缺失指标检测 —— 不再猜测向量哪里出错。
@@ -49,8 +46,6 @@ features:
 CVSS 是业界标准的漏洞严重性评级体系，但以编程方式处理向量十分痛苦 —— 解析易错、评分涉及版本特定公式、比较依赖手工、校验零散。
 
 **CVSS Skills** 用一个经过充分测试的工具包解决上述所有问题。
-
-![功能全景图](/images/feature-map.png)
 
 ## 架构总览
 
@@ -111,8 +106,6 @@ flowchart LR
 
 一个 CVSS 向量最多由 **3 层**指标构成：
 
-![向量结构](/images/vector-structure.png)
-
 ```mermaid
 flowchart TD
     Prefix["CVSS:3.1"] --> Base
@@ -153,8 +146,6 @@ flowchart TD
 ```
 
 ## 严重性等级
-
-![严重性仪表盘](/images/severity-gauge.png)
 
 | 等级     | 分数范围    | 颜色   |
 | -------- | ----------- | ------ |
@@ -223,9 +214,27 @@ cvss score "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
 # 输出: 9.8 (Critical)
 ```
 
+## 探索文档
+
+选择一条路线深入——每个模块、每条命令、每个指标都有专属页面。
+
+| 🧭 路线 | 📄 你将学到 | 🔗 入口 |
+| -------- | ----------- | ------ |
+| 🎓 **教程** | 循序渐进：第一个向量、评分、校验、批处理脚本 | [教程 →](/zh/tutorials/) |
+| 🍳 **菜谱** | 即抄即用：筛选严重漏洞、排序、CSV、存数据库 | [菜谱 →](/zh/recipes/) |
+| 💻 **CLI 命令** | 全部 30+ 命令，含 flag、真实输出与 JSON 示例 | [命令行参考 →](/zh/cli/) |
+| 📦 **Go SDK** | 核心包：`cvss`、`parser`、`vector`、`mock` + 构建器、选项、距离、影响 | [Go SDK →](/zh/sdk/) |
+| 📐 **CVSS 指标** | 每个指标维度——取值、分数、版本差异（AV…MA） | [指标 →](/zh/metrics/) |
+| 🧠 **概念原理** | 评分公式、严重性等级、v3.0↔v3.1、校验与距离 | [概念 →](/zh/concepts/) |
+
 ## 下一步
 
+- [教程](/zh/tutorials/) —— 从[快速入门](/zh/tutorials/getting-started)开始
+- [菜谱](/zh/recipes/) —— 常见任务的即抄即用方案
 - [集成方式](/zh/integration/) —— 对比 Skills、Go SDK、CLI 与 MCP，附决策树
-- [CLI 参考](/zh/cli/) —— 全部 30+ 命令及示例
+- [命令行参考](/zh/cli/) —— 全部 30+ 命令及示例
+- [Go SDK](/zh/sdk/) —— 学习核心包与编程模式
+- [CVSS 指标](/zh/metrics/) —— 理解每个指标及其评分影响
+- [概念原理](/zh/concepts/) —— 评分公式、版本差异、校验模型
 - [下载](/zh/downloads/) —— 各系统/架构的预编译二进制，含校验和验证
-- [API 文档](/docs/zh/api/) —— 完整的 Go SDK 参考
+- [API 参考](/docs/zh/api/) —— 完整的 Go SDK 参考

@@ -2,6 +2,8 @@
 
 Compare two CVSS vectors: diff, merge, and distance calculations.
 
+📖 Full documentation: https://scagogogo.github.io/cvss-skills/cli/commands/diff
+
 ## CLI Commands
 
 ```bash

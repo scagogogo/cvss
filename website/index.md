@@ -5,9 +5,6 @@ hero:
   name: CVSS Skills
   text: CVSS v3.0 / v3.1 Toolkit
   tagline: Parse, score, validate, compare & build vulnerability vectors — through Go SDK, CLI, Claude Code Skills & MCP.
-  image:
-    src: /images/integration-methods.png
-    alt: Four integration methods of CVSS Skills
   actions:
     - theme: brand
       text: Get Started
@@ -49,8 +46,6 @@ features:
 CVSS is the industry standard for rating vulnerability severity, but working with vectors programmatically is painful — parsing is error-prone, scoring involves version-specific formulas, comparison is manual, and validation is scattered.
 
 **CVSS Skills** solves all of this with a single, well-tested toolkit.
-
-![Feature Map](/images/feature-map.png)
 
 ## Architecture at a Glance
 
@@ -111,8 +106,6 @@ flowchart LR
 
 A CVSS vector consists of up to **3 layers** of metrics:
 
-![Vector Structure](/images/vector-structure.png)
-
 ```mermaid
 flowchart TD
     Prefix["CVSS:3.1"] --> Base
@@ -153,8 +146,6 @@ flowchart TD
 ```
 
 ## Severity Scale
-
-![Severity Gauge](/images/severity-gauge.png)
 
 | Rating   | Score Range | Color   |
 | -------- | ----------- | ------- |
@@ -223,9 +214,27 @@ cvss score "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
 # Output: 9.8 (Critical)
 ```
 
+## Explore the Docs
+
+Pick a track and go deep — every module, command, and metric has its own page.
+
+| 🧭 Track | 📄 What you'll learn | 🔗 Start here |
+| -------- | -------------------- | ------------- |
+| 🎓 **Tutorials** | Step-by-step lessons: first vector, scoring, validation, batch scripting | [Tutorials →](/tutorials/) |
+| 🍳 **Recipes** | Copy-paste solutions: filter critical vulns, sort, CSV, DB storage | [Recipes →](/recipes/) |
+| 💻 **CLI Commands** | All 30+ commands, each with flags, real output & JSON examples | [CLI Reference →](/cli/) |
+| 📦 **Go SDK** | Core packages: `cvss`, `parser`, `vector`, `mock` + builder, options, distance, impact | [Go SDK →](/sdk/) |
+| 📐 **CVSS Metrics** | Every metric dimension — values, scores, version quirks (AV…MA) | [Metrics →](/metrics/) |
+| 🧠 **Concepts** | Scoring formulas, severity bands, v3.0↔v3.1, validation & distance | [Concepts →](/concepts/) |
+
 ## Next Steps
 
+- [Tutorials](/tutorials/) — start with [Getting Started](/tutorials/getting-started)
+- [Recipes](/recipes/) — copy-paste solutions for common tasks
 - [Integration Methods](/integration/) — compare Skills, Go SDK, CLI, and MCP, with a decision tree
 - [CLI Reference](/cli/) — all 30+ commands with examples
+- [Go SDK](/sdk/) — learn the core packages and patterns
+- [CVSS Metrics](/metrics/) — understand every metric and its score impact
+- [Concepts](/concepts/) — scoring formulas, version differences, validation
 - [Downloads](/downloads/) — pre-built binaries for every OS/arch, with checksum verification
-- [API Docs](/docs/api/) — the complete Go SDK reference
+- [API Reference](/docs/api/) — the complete generated Go SDK reference

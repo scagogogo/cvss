@@ -2,6 +2,8 @@
 
 Complete reference for all CVSS v3.x metrics, values, and scores.
 
+📖 Full documentation: https://scagogogo.github.io/cvss-skills/metrics/
+
 ## Base Metrics (Required, 8 total)
 
 | Key | Name | Values & Scores |

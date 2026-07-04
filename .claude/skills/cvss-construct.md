@@ -2,6 +2,8 @@
 
 Build CVSS vectors from scratch using multiple construction patterns.
 
+📖 Full documentation: https://scagogogo.github.io/cvss-skills/cli/commands/build
+
 ## CLI Command
 
 ```bash

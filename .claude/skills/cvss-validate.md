@@ -2,6 +2,8 @@
 
 Validate CVSS v3.x vector strings for correctness and completeness.
 
+📖 Full documentation: https://scagogogo.github.io/cvss-skills/cli/commands/validate
+
 ## CLI Command
 
 ```bash

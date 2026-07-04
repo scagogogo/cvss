@@ -2,6 +2,8 @@
 
 Install the CVSS CLI tool and use the Go SDK as a library dependency.
 
+📖 Full documentation: https://scagogogo.github.io/cvss-skills/downloads/
+
 ## CLI Installation
 
 ### From GitHub Release (Recommended)

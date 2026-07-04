@@ -7,8 +7,6 @@ description: Compare the four ways to use CVSS Skills — Claude Code Skills, Go
 
 CVSS Skills is available through **four** integration methods. Pick the one that fits your workflow.
 
-![Integration Methods](/images/integration-methods.png)
-
 ## Which Method Should I Use?
 
 ```mermaid
