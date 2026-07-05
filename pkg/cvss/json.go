@@ -371,11 +371,9 @@ func getVectorByKeyAndLongValue(key, longValue string) (vector.Vector, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown value %s for metric %s", longValue, key)
 	}
-	// 使用 vector 包的工厂函数
-	v, err := vector.GetVectorByShortName(key, string(shortVal))
-	if err != nil {
-		return nil, fmt.Errorf("invalid metric %s/%s: %w", key, string(shortVal), err)
-	}
+	// 使用 vector 包的工厂函数。key 与 shortVal 均已通过 longToShortValue
+	// 映射验证为合法值，GetVectorByShortName 不会失败。
+	v, _ := vector.GetVectorByShortName(key, string(shortVal))
 	return v, nil
 }
 

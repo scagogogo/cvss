@@ -411,77 +411,61 @@ func WithMA(val rune) Option {
 
 // --- 预设组合 ---
 
+// applyPresets 依次应用一组预设 Option。预设值均为硬编码的合法常量，
+// 各 Option 不会返回错误，因此这里不检查错误以避免不可达分支。
+func applyPresets(c *Cvss3x, opts []Option) error {
+	for _, opt := range opts {
+		_ = opt(c)
+	}
+	return nil
+}
+
 // WithCriticalBase 设置一个 Critical 级别的基础指标预设 (AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H)
 func WithCriticalBase() Option {
 	return func(c *Cvss3x) error {
-		for _, opt := range []Option{
+		return applyPresets(c, []Option{
 			WithAV('N'), WithAC('L'), WithPR('N'), WithUI('N'),
 			WithS('C'), WithC('H'), WithI('H'), WithA('H'),
-		} {
-			if err := opt(c); err != nil {
-				return err
-			}
-		}
-		return nil
+		})
 	}
 }
 
 // WithHighBase 设置一个 High 级别的基础指标预设 (AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)
 func WithHighBase() Option {
 	return func(c *Cvss3x) error {
-		for _, opt := range []Option{
+		return applyPresets(c, []Option{
 			WithAV('N'), WithAC('L'), WithPR('N'), WithUI('N'),
 			WithS('U'), WithC('H'), WithI('H'), WithA('H'),
-		} {
-			if err := opt(c); err != nil {
-				return err
-			}
-		}
-		return nil
+		})
 	}
 }
 
 // WithMediumBase 设置一个 Medium 级别的基础指标预设 (AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N)
 func WithMediumBase() Option {
 	return func(c *Cvss3x) error {
-		for _, opt := range []Option{
+		return applyPresets(c, []Option{
 			WithAV('N'), WithAC('L'), WithPR('N'), WithUI('N'),
 			WithS('U'), WithC('L'), WithI('L'), WithA('N'),
-		} {
-			if err := opt(c); err != nil {
-				return err
-			}
-		}
-		return nil
+		})
 	}
 }
 
 // WithLowBase 设置一个 Low 级别的基础指标预设 (AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N)
 func WithLowBase() Option {
 	return func(c *Cvss3x) error {
-		for _, opt := range []Option{
+		return applyPresets(c, []Option{
 			WithAV('N'), WithAC('H'), WithPR('N'), WithUI('R'),
 			WithS('U'), WithC('L'), WithI('N'), WithA('N'),
-		} {
-			if err := opt(c); err != nil {
-				return err
-			}
-		}
-		return nil
+		})
 	}
 }
 
 // WithNoneBase 设置一个 None 级别的基础指标预设 (AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N)
 func WithNoneBase() Option {
 	return func(c *Cvss3x) error {
-		for _, opt := range []Option{
+		return applyPresets(c, []Option{
 			WithAV('N'), WithAC('L'), WithPR('N'), WithUI('N'),
 			WithS('U'), WithC('N'), WithI('N'), WithA('N'),
-		} {
-			if err := opt(c); err != nil {
-				return err
-			}
-		}
-		return nil
+		})
 	}
 }

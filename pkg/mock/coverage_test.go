@@ -240,3 +240,16 @@ func TestCvss30Presets_Severity(t *testing.T) {
 		})
 	}
 }
+
+// TestCalculateRandomScore_ErrorPath 覆盖 calculateRandomScore 的错误分支：
+// 传入一个缺失基础指标的无效对象，Calculate 会因 Check 失败而返回错误，
+// calculateRandomScore 应将其包装后如实返回。
+func TestCalculateRandomScore_ErrorPath(t *testing.T) {
+	// NewCvss3x() 创建的对象没有设置任何基础指标，Check 必然失败
+	invalid := cvss.NewCvss3x()
+	obj, score, err := calculateRandomScore(invalid)
+	assert.Error(t, err)
+	assert.Nil(t, obj)
+	assert.Equal(t, float64(0), score)
+	assert.Contains(t, err.Error(), "failed to calculate score")
+}

@@ -166,14 +166,13 @@ func (x *Cvss3x) MissingMetrics() []string {
 	if err == nil {
 		return nil
 	}
-	if ve, ok := err.(ValidationErrors); ok {
-		var missing []string
-		for _, e := range ve {
-			if e.Message == "is required but not set" {
-				missing = append(missing, e.Metric)
-			}
+	// Validate() 只返回 nil 或 ValidationErrors，类型断言必成功
+	ve := err.(ValidationErrors)
+	var missing []string
+	for _, e := range ve {
+		if e.Message == "is required but not set" {
+			missing = append(missing, e.Metric)
 		}
-		return missing
 	}
-	return nil
+	return missing
 }

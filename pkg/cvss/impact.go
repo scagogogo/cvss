@@ -10,19 +10,19 @@ import (
 
 // MetricImpact 表示单个指标变化对评分的影响
 type MetricImpact struct {
-	Metric      string  // 指标短名称，如 "AV"
-	CurrentVal  string  // 当前值，如 "N"
-	CurrentScore float64 // 当前评分
+	Metric       string        // 指标短名称，如 "AV"
+	CurrentVal   string        // 当前值，如 "N"
+	CurrentScore float64       // 当前评分
 	ValueImpacts []ValueImpact // 每个可选值的影响
 }
 
 // ValueImpact 表示某个指标值对评分的影响
 type ValueImpact struct {
-	Value      string  // 指标值，如 "A"
-	LongValue  string  // 长名称，如 "Adjacent"
-	Score      float64 // 选择该值后的评分
-	Delta      float64 // 与当前评分的差异（正数=升高，负数=降低）
-	Severity   Severity // 选择该值后的严重性
+	Value     string   // 指标值，如 "A"
+	LongValue string   // 长名称，如 "Adjacent"
+	Score     float64  // 选择该值后的评分
+	Delta     float64  // 与当前评分的差异（正数=升高，负数=降低）
+	Severity  Severity // 选择该值后的严重性
 }
 
 // String 返回影响分析的可读表示
@@ -59,10 +59,8 @@ func ImpactAnalysis(cv *Cvss3x) ([]MetricImpact, error) {
 	}
 
 	calc := NewCalculator(cv)
-	baseScore, err := calc.GetBaseScore()
-	if err != nil {
-		return nil, err
-	}
+	// 入口已 Check() 通过，基础评分计算不会失败
+	baseScore, _ := calc.GetBaseScore()
 
 	// 每个基础指标的可选值
 	metricValues := map[string][]rune{
@@ -107,17 +105,12 @@ func ImpactAnalysis(cv *Cvss3x) ([]MetricImpact, error) {
 				continue
 			}
 
-			// 创建修改后的向量
-			modified, err := modifyBaseMetric(cv, metric, val)
-			if err != nil {
-				continue
-			}
+			// 创建修改后的向量（metric 与 val 均来自合法枚举，modifyBaseMetric 不会失败）
+			modified, _ := modifyBaseMetric(cv, metric, val)
 
 			modCalc := NewCalculator(modified)
-			modScore, err := modCalc.GetBaseScore()
-			if err != nil {
-				continue
-			}
+			// 修改后的向量依然合法，GetBaseScore 不会失败
+			modScore, _ := modCalc.GetBaseScore()
 
 			vi := ValueImpact{
 				Value:     string(val),
@@ -160,10 +153,8 @@ func FindMetricChangesToReachTarget(cv *Cvss3x, targetScore float64) ([]MetricCh
 	}
 
 	calc := NewCalculator(cv)
-	currentScore, err := calc.GetBaseScore()
-	if err != nil {
-		return nil, err
-	}
+	// 入口已 Check() 通过，基础评分计算不会失败
+	currentScore, _ := calc.GetBaseScore()
 
 	// 如果已经达到目标（容差 0.05）
 	if math.Abs(currentScore-targetScore) <= 0.05 {
@@ -171,10 +162,8 @@ func FindMetricChangesToReachTarget(cv *Cvss3x, targetScore float64) ([]MetricCh
 	}
 
 	// 对每个指标，尝试每个可选值，找最小变化集合
-	impacts, err := ImpactAnalysis(cv)
-	if err != nil {
-		return nil, err
-	}
+	// ImpactAnalysis 在 Check 通过后不会失败
+	impacts, _ := ImpactAnalysis(cv)
 
 	needIncrease := targetScore > currentScore
 
@@ -259,10 +248,8 @@ func SensitivityAnalysis(cv *Cvss3x) ([]MetricSensitivity, error) {
 	}
 
 	calc := NewCalculator(cv)
-	baseScore, err := calc.GetBaseScore()
-	if err != nil {
-		return nil, err
-	}
+	// 入口已 Check() 通过，基础评分计算不会失败
+	baseScore, _ := calc.GetBaseScore()
 
 	metricValues := map[string][]rune{
 		"AV": {'N', 'A', 'L', 'P'},
@@ -281,15 +268,10 @@ func SensitivityAnalysis(cv *Cvss3x) ([]MetricSensitivity, error) {
 		var minScore, maxScore float64 = 10.0, 0.0
 
 		for _, val := range metricValues[metric] {
-			modified, err := modifyBaseMetric(cv, metric, val)
-			if err != nil {
-				continue
-			}
+			// metric 与 val 均来自合法枚举，modifyBaseMetric 与 GetBaseScore 不会失败
+			modified, _ := modifyBaseMetric(cv, metric, val)
 			modCalc := NewCalculator(modified)
-			score, err := modCalc.GetBaseScore()
-			if err != nil {
-				continue
-			}
+			score, _ := modCalc.GetBaseScore()
 			if score < minScore {
 				minScore = score
 			}

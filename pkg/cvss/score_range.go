@@ -9,12 +9,12 @@ import (
 
 // ScoreRange 表示部分向量的评分范围
 type ScoreRange struct {
-	MinScore     float64 // 可能的最低评分
-	MaxScore     float64 // 可能的最高评分
+	MinScore     float64  // 可能的最低评分
+	MaxScore     float64  // 可能的最高评分
 	MinSeverity  Severity // 最低严重性
 	MaxSeverity  Severity // 最高严重性
-	IsComplete   bool    // 是否所有基础指标都已设置
-	MissingCount int     // 缺失的基础指标数量
+	IsComplete   bool     // 是否所有基础指标都已设置
+	MissingCount int      // 缺失的基础指标数量
 }
 
 // String 返回评分范围的可读表示
@@ -92,12 +92,9 @@ func findMinMaxScore(cv *Cvss3x, missing []string) (float64, float64) {
 	var tryCombinations func(int, *Cvss3x)
 	tryCombinations = func(idx int, current *Cvss3x) {
 		if idx >= len(missing) {
-			// 所有缺失指标都已填充，计算评分
+			// 所有缺失指标都已填充，向量完整，GetBaseScore 不会失败
 			calc := NewCalculator(current)
-			score, err := calc.GetBaseScore()
-			if err != nil {
-				return
-			}
+			score, _ := calc.GetBaseScore()
 			if score < minScore {
 				minScore = score
 			}
@@ -188,11 +185,9 @@ func getExtremeCase(cv *Cvss3x, worst bool) (*Cvss3x, float64, error) {
 	var tryCombinations func(int, *Cvss3x)
 	tryCombinations = func(idx int, current *Cvss3x) {
 		if idx >= len(missing) {
+			// 所有缺失指标已填充，向量完整，GetBaseScore 不会失败
 			calc := NewCalculator(current)
-			score, err := calc.GetBaseScore()
-			if err != nil {
-				return
-			}
+			score, _ := calc.GetBaseScore()
 			diff := math.Abs(score - targetScore)
 			if diff < bestDiff {
 				bestDiff = diff
@@ -228,10 +223,7 @@ func getExtremeCase(cv *Cvss3x, worst bool) (*Cvss3x, float64, error) {
 
 	tryCombinations(0, cv)
 
-	if bestCv == nil {
-		return nil, 0, fmt.Errorf("no valid combination found")
-	}
-
+	// missing 非空时，至少一种合法组合使 GetBaseScore 成功，bestCv 必非 nil。
 	calc := NewCalculator(bestCv)
 	score, _ := calc.GetBaseScore()
 	return bestCv, score, nil

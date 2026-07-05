@@ -3099,3 +3099,30 @@ func TestFindMetricChangesToReachTarget_NearTargetNoChange(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, changes)
 }
+
+// TestModifyBaseMetric_InvalidRune 覆盖 modifyBaseMetric 中 GetXxx(val) 返回错误的分支：
+// 合法 metric 名 + 非法 rune → vector.Get* 返回错误，命中末尾的 if err != nil。
+func TestModifyBaseMetric_InvalidRune(t *testing.T) {
+	base := NewBuilder().Version(3, 1).
+		AV('N').AC('L').PR('N').UI('N').S('U').C('H').I('H').A('H').
+		MustBuild()
+	metrics := []string{"AV", "AC", "PR", "UI", "S", "C", "I", "A"}
+	for _, m := range metrics {
+		_, err := modifyBaseMetric(base, m, 'Z')
+		assert.Error(t, err, m)
+	}
+}
+
+// TestFindMetricChangesToReachTarget_BreakAfterChange 覆盖循环顶部的 break：
+// current=7.3，target=5.6，needDecrease。impacts 按 maxAbsDelta 降序为
+// AV(→4.3) / PR(→4.7) / AC(→5.6)。三次变更后 workingScore=5.6 落入容差，
+// 第四次迭代进入循环时命中 break（其后仍有 C/I/A/S/UI 指标）。
+func TestFindMetricChangesToReachTarget_BreakAfterChange(t *testing.T) {
+	cv := NewBuilder().Version(3, 1).
+		AV('N').AC('L').PR('N').UI('N').S('U').C('L').I('L').A('L').
+		MustBuild() // 7.3
+	changes, err := FindMetricChangesToReachTarget(cv, 5.6)
+	require.NoError(t, err)
+	// AV、PR、AC 三次变更后 workingScore=5.6 ∈ [5.55,5.65]，下次迭代 break
+	require.Len(t, changes, 3)
+}

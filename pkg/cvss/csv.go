@@ -76,12 +76,10 @@ func (x *Cvss3x) CSVRow(calc *Calculator) ([]string, error) {
 //	fmt.Println(buf.String())
 func WriteCSV(w io.Writer, vectors []*Cvss3x) error {
 	cw := csv.NewWriter(w)
-	defer cw.Flush()
 
-	// 写入表头
-	if err := cw.Write(CSVHeader()); err != nil {
-		return fmt.Errorf("failed to write CSV header: %w", err)
-	}
+	// 写入表头。csv.Writer.Write 写入内部 buffer，错误延迟到 Flush，
+	// 因此这里不检查 Write 的返回值，统一在下方 Flush 时捕获。
+	_ = cw.Write(CSVHeader())
 
 	// 写入每行
 	for _, cv := range vectors {
@@ -93,9 +91,13 @@ func WriteCSV(w io.Writer, vectors []*Cvss3x) error {
 		if row == nil {
 			continue
 		}
-		if err := cw.Write(row); err != nil {
-			return fmt.Errorf("failed to write CSV row: %w", err)
-		}
+		_ = cw.Write(row)
+	}
+
+	// Flush 时一并捕获所有写入错误（包括底层 writer 的失败）。
+	cw.Flush()
+	if err := cw.Error(); err != nil {
+		return fmt.Errorf("failed to write CSV: %w", err)
 	}
 
 	return nil

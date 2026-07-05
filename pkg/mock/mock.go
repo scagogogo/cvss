@@ -138,7 +138,14 @@ func RandomCvss3xVectorString(minorVersion int) string {
 // RandomCvss3xWithScore 生成一个随机 CVSS 3.x 对象并计算评分
 // 返回对象和评分，如果计算出错则返回错误
 func RandomCvss3xWithScore(minorVersion int) (*cvss.Cvss3x, float64, error) {
-	obj := RandomCvss3x(minorVersion)
+	return calculateRandomScore(RandomCvss3x(minorVersion))
+}
+
+// calculateRandomScore 对给定的 CVSS 对象计算评分。
+// 提取为独立函数以便对错误路径进行测试：RandomCvss3x 生成的向量必然合法，
+// Calculate 不会失败，但调用方仍可能传入无效对象（例如缺失基础指标），
+// 此时错误会被如实包装返回。
+func calculateRandomScore(obj *cvss.Cvss3x) (*cvss.Cvss3x, float64, error) {
 	calc := cvss.NewCalculator(obj)
 	score, err := calc.Calculate()
 	if err != nil {

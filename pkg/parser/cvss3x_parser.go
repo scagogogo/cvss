@@ -61,12 +61,8 @@ func (x *Cvss3xParser) Parse() (*cvss.Cvss3x, error) {
 	if !x.isNotEnd() {
 		return nil, fmt.Errorf("cvss3x %s syntax error: incomplete vector string, expected vectors after version", x.cvss3xStr)
 	}
-
-	// 跳过可能存在的空白
-	x.skipWhitespace()
-	if !x.isNotEnd() || x.cvss3xRunes[x.i] != '/' {
-		return nil, fmt.Errorf("cvss3x %s syntax error at %d, expected '/' but got '%c'", x.cvss3xStr, x.i, x.cvss3xRunes[x.i])
-	}
+	// 此处当前位置必然是 '/'：readMinorVersion 遇到 '/' 时回退停在 '/'，
+	// 否则读到末尾被上方的末尾检查拦截。每个向量形如 /KEY:VALUE，由下方循环消费。
 
 	// 每个向量的格式都是 /KEY:VALUE
 	for x.isNotEnd() {

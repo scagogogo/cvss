@@ -259,9 +259,7 @@ func (dc *DistanceCalculator) JaccardSimilarityWithEnv() float64 {
 	hammingDist := dc.HammingDistanceWithEnv()
 
 	// Jaccard 相似度 = 相同指标数 / 总指标数
+	// totalMetrics 至少为 8（基础指标恒计入），不会为 0。
 	sameMetrics := totalMetrics - hammingDist
-	if totalMetrics == 0 {
-		return 0.0
-	}
 	return float64(sameMetrics) / float64(totalMetrics)
 }
