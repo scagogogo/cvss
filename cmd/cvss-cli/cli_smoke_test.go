@@ -173,10 +173,207 @@ func TestEnumerateCommand(t *testing.T) {
 	}
 }
 
+// runCommandWithStdin is like runCommand but also feeds stdinText to the
+// command's standard input (used by sort, which reads vectors from stdin
+// when given "-" or no file argument).
+func runCommandWithStdin(t *testing.T, stdinText string, args ...string) string {
+	t.Helper()
+
+	origOut := os.Stdout
+	origIn := os.Stdin
+	rOut, wOut, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	rIn, wIn, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = wOut
+	os.Stdin = rIn
+
+	// Write stdin in a goroutine so a large input cannot deadlock.
+	go func() {
+		_, _ = io.WriteString(wIn, stdinText)
+		wIn.Close()
+	}()
+
+	silenced := rootCmd.SilenceErrors
+	rootCmd.SilenceErrors = true
+	rootCmd.SetErr(io.Discard)
+	rootCmd.SetArgs(args)
+
+	var buf bytes.Buffer
+	copyDone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&buf, rOut)
+		close(copyDone)
+	}()
+
+	execErr := rootCmd.Execute()
+
+	os.Stdout = origOut
+	os.Stdin = origIn
+	wOut.Close()
+	<-copyDone
+	rOut.Close()
+	rIn.Close()
+
+	rootCmd.SilenceErrors = silenced
+	rootCmd.SetArgs(nil)
+
+	if execErr != nil {
+		t.Fatalf("unexpected error for args %v: %v", args, execErr)
+	}
+	return buf.String()
+}
+
 // TestVersionFlag verifies the --version flag outputs a version.
 func TestVersionFlag(t *testing.T) {
 	out := runCommand(t, "--version")
 	if !strings.Contains(out, "dev") && !strings.Contains(out, "version") {
 		t.Errorf("version output unexpected: %q", out)
+	}
+}
+
+// TestEqualCommand verifies equal reports two identical vectors as equal.
+func TestEqualCommand(t *testing.T) {
+	out := runCommand(t, "equal", hiVec(), hiVec())
+	if !strings.Contains(out, "Equal") {
+		t.Errorf("equal output missing Equal: %q", out)
+	}
+}
+
+// TestDescribeCommand verifies describe outputs human-readable metric names.
+func TestDescribeCommand(t *testing.T) {
+	out := runCommand(t, "describe", hiVec())
+	if !strings.Contains(out, "Network") {
+		t.Errorf("describe output missing Network: %q", out)
+	}
+	if !strings.Contains(out, "Confidentiality") {
+		t.Errorf("describe output missing Confidentiality: %q", out)
+	}
+}
+
+// TestCanonicalizeCommand verifies canonicalize emits the normalized vector.
+func TestCanonicalizeCommand(t *testing.T) {
+	out := runCommand(t, "canonicalize", hiVec())
+	if !strings.Contains(out, hiVec()) {
+		t.Errorf("canonicalize output missing vector: %q", out)
+	}
+}
+
+// TestConvertCommand verifies convert --to 3.0 downgrades the version.
+func TestConvertCommand(t *testing.T) {
+	out := runCommand(t, "convert", "--to", "3.0", hiVec())
+	if !strings.Contains(out, "CVSS:3.0/") {
+		t.Errorf("convert output missing CVSS:3.0: %q", out)
+	}
+}
+
+// TestGetCommand verifies get retrieves a single metric value.
+func TestGetCommand(t *testing.T) {
+	out := runCommand(t, "get", hiVec(), "AV")
+	if !strings.Contains(out, "N") {
+		t.Errorf("get output missing N: %q", out)
+	}
+}
+
+// TestGroupsCommand verifies groups lists the Base metric group.
+func TestGroupsCommand(t *testing.T) {
+	out := runCommand(t, "groups", hiVec())
+	if !strings.Contains(out, "Base") {
+		t.Errorf("groups output missing Base: %q", out)
+	}
+}
+
+// TestMapCommand verifies map outputs key=value pairs.
+func TestMapCommand(t *testing.T) {
+	out := runCommand(t, "map", hiVec())
+	if !strings.Contains(out, "AV=N") {
+		t.Errorf("map output missing AV=N: %q", out)
+	}
+}
+
+// TestMergeCommand verifies merge combines base and temporal vectors.
+func TestMergeCommand(t *testing.T) {
+	temporal := vec("CVSS:3.1/", "E:F/RL:T/RC:C")
+	out := runCommand(t, "merge", hiVec(), temporal)
+	if !strings.Contains(out, "E:F") {
+		t.Errorf("merge output missing temporal metric E:F: %q", out)
+	}
+}
+
+// TestModifyCommand verifies modify applies a metric change.
+func TestModifyCommand(t *testing.T) {
+	out := runCommand(t, "modify", hiVec(), "--AV=L")
+	if !strings.Contains(out, "AV:L") {
+		t.Errorf("modify output missing AV:L: %q", out)
+	}
+}
+
+// TestPresetCommand verifies preset emits a known preset vector.
+func TestPresetCommand(t *testing.T) {
+	out := runCommand(t, "preset", "critical")
+	if !strings.Contains(out, "CVSS:3.1/") {
+		t.Errorf("preset output missing CVSS:3.1: %q", out)
+	}
+}
+
+// TestRandomCommand verifies random emits a parseable random vector.
+func TestRandomCommand(t *testing.T) {
+	out := runCommand(t, "random")
+	if !strings.Contains(out, "CVSS:3.1/") {
+		t.Errorf("random output missing CVSS:3.1: %q", out)
+	}
+}
+
+// TestRangeCommand verifies range reports the score range.
+func TestRangeCommand(t *testing.T) {
+	out := runCommand(t, "range", hiVec())
+	if !strings.Contains(out, "Score range") && !strings.Contains(out, "range") {
+		t.Errorf("range output missing range info: %q", out)
+	}
+}
+
+// TestSubsCommand verifies subs computes sub-scores.
+func TestSubsCommand(t *testing.T) {
+	out := runCommand(t, "subs", hiVec())
+	if !strings.Contains(out, "Impact") && !strings.Contains(out, "Exploitability") {
+		t.Errorf("subs output missing sub-scores: %q", out)
+	}
+}
+
+// TestAnalyzeCommand verifies analyze emits impact analysis.
+func TestAnalyzeCommand(t *testing.T) {
+	out := runCommand(t, "analyze", hiVec())
+	if !strings.Contains(out, "Impact") && !strings.Contains(out, "Impact Analysis") {
+		t.Errorf("analyze output missing impact analysis: %q", out)
+	}
+}
+
+// TestSortCommand verifies sort reads vectors from stdin and orders them.
+func TestSortCommand(t *testing.T) {
+	stdin := loAVec() + "\n" + hiVec() + "\n"
+	out := runCommandWithStdin(t, stdin, "sort", "-")
+	// Descending default: the 9.8 vector should appear before the lower one.
+	hi := strings.Index(out, hiVec())
+	lo := strings.Index(out, loAVec())
+	if hi < 0 || lo < 0 {
+		t.Fatalf("sort output missing vectors: %q", out)
+	}
+	if hi > lo {
+		t.Errorf("sort not descending (hi=%d should come before lo=%d): %q", hi, lo, out)
+	}
+}
+
+// TestCSVWriteCommand verifies csv write emits CSV with a header row.
+func TestCSVWriteCommand(t *testing.T) {
+	out := runCommand(t, "csv", "write", hiVec())
+	if !strings.Contains(out, "CVSS") {
+		t.Errorf("csv write output missing CVSS header: %q", out)
+	}
+	if !strings.Contains(out, hiVec()) {
+		t.Errorf("csv write output missing vector row: %q", out)
 	}
 }
