@@ -8,11 +8,16 @@ import (
 	"testing"
 )
 
-// vec builds a CVSS vector string by concatenation rather than a single
-// string literal. Some Go 1.25 toolchains mis-constant-fold the byte index
-// of a long vector literal that also appears in cobra command Example fields,
-// corrupting a '/' into ':' at compile time. Building the string from parts
-// defeats that folding and yields the correct bytes.
+// vec builds a CVSS vector string by concatenating parts instead of writing
+// it as a single string literal.
+//
+// Under Go 1.25, a long CVSS vector written as one literal is intermittently
+// miscompiled: a '/' separator (e.g. the one before "C:H") is corrupted to
+// ':' at compile time, so parser.ParseString fails with "invalid vector value:
+// H:I:H". The corruption is content-dependent, cache-state-dependent, and
+// surfaces only when the test binary also links pkg/parser; it is not a
+// parser bug. Constructing the same string at runtime via strings.Join
+// sidesteps the bad compile-time folding and yields correct bytes reliably.
 func vec(parts ...string) string {
 	return strings.Join(parts, "")
 }
