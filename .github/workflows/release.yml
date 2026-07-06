@@ -27,7 +27,17 @@ jobs:
           cache: true
 
       - name: Run Tests
-        run: go test -race ./pkg/... ./cmd/...
+        run: |
+          # Run all tests (cmd has no unit tests; pkg is where coverage is enforced)
+          go test -race ./cmd/...
+          go test -race -coverprofile=coverage.txt -covermode=atomic ./pkg/...
+          total=$(go tool cover -func=coverage.txt | tail -1 | awk '{print $NF}' | tr -d '%')
+          echo "Total coverage (pkg): ${total}%"
+          if [ "$total" != "100.0" ]; then
+            echo "Coverage $total% is below the 100% threshold — refusing to release" >&2
+            exit 1
+          fi
+          echo "Coverage threshold (100%) met"
 
   goreleaser:
     name: Release with GoReleaser
