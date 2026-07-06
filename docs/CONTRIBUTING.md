@@ -52,17 +52,28 @@ git checkout -b fix/issue-description
 
 ### 4. Test Your Changes
 
-```bash
-# Run all tests
-go test ./...
+This project enforces **100% test coverage** on `pkg/...`. All contributions must maintain this threshold.
 
-# Run tests with coverage
-go test -cover ./...
+```bash
+# Run all tests (4 packages)
+go test ./...
+# or via Makefile:
+make test
+
+# Enforce 100% coverage threshold (CI requires this)
+make coverage-check
+
+# Generate an HTML coverage report
+make coverage
 
 # Run specific package tests
 go test ./pkg/parser
 go test ./pkg/cvss
 go test ./pkg/vector
+go test ./pkg/mock
+
+# Lint (same as CI)
+make lint
 
 # Run benchmarks
 go test -bench=. ./...

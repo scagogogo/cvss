@@ -52,6 +52,16 @@ jobs:
           go test -v -race -coverprofile=coverage.txt -covermode=atomic ./pkg/...
           go test -v ./cmd/...
 
+      - name: Enforce 100% Coverage Threshold
+        run: |
+          total=$(go tool cover -func=coverage.txt | tail -1 | awk '{print $NF}' | tr -d '%')
+          echo "Total coverage: ${total}%"
+          if [ "$total" != "100.0" ]; then
+            echo "Coverage $total% is below the 100% threshold" >&2
+            exit 1
+          fi
+          echo "Coverage threshold (100%) met"
+
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4
         with:

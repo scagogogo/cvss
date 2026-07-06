@@ -1,4 +1,4 @@
-.PHONY: build clean test run test-ci coverage
+.PHONY: build clean test run test-ci coverage coverage-check lint
 
 # 默认目标
 all: build
@@ -8,10 +8,10 @@ build:
 	@echo "Building cvss-cli..."
 	@go build -o bin/cvss-cli ./cmd/cvss-cli/
 
-# 运行测试
+# 运行测试（全部 4 个包）
 test:
 	@echo "Running tests..."
-	@go test ./pkg/cvss ./pkg/parser ./pkg/vector
+	@go test ./pkg/...
 
 # 运行程序
 run:
@@ -21,7 +21,7 @@ run:
 # 清理
 clean:
 	@echo "Cleaning..."
-	@rm -rf bin/
+	@rm -rf bin/ coverage.txt coverage.html coverage.xml
 
 # 安装
 install:
@@ -47,18 +47,40 @@ coverage:
 	@echo "Generating coverage report..."
 	@go test -coverprofile=coverage.txt -covermode=atomic ./pkg/...
 	@go tool cover -html=coverage.txt -o coverage.html
+	@go tool cover -func=coverage.txt | tail -1
 	@echo "Coverage report saved to coverage.html"
+
+# 覆盖率门槛检查（要求 100%）
+coverage-check:
+	@echo "Checking coverage threshold (100%)..."
+	@go test -coverprofile=coverage.txt -covermode=atomic ./pkg/... >/dev/null 2>&1
+	@total=$$(go tool cover -func=coverage.txt | tail -1 | awk '{print $$NF}' | tr -d '%' ); \
+	if [ "$$total" = "100.0" ]; then \
+		echo "Coverage is 100.0% - threshold met"; \
+	else \
+		echo "Coverage is $$total% - below 100% threshold" >&2; \
+		rm -f coverage.txt; \
+		exit 1; \
+	fi
+	@rm -f coverage.txt
+
+# 代码检查
+lint:
+	@echo "Running golangci-lint..."
+	@golangci-lint run --timeout=5m ./...
 
 # 帮助
 help:
-	@echo "CVSS Parser Makefile Help"
+	@echo "CVSS Skills Makefile Help"
 	@echo ""
-	@echo "make             - Build the program"
-	@echo "make build       - Build the program"
-	@echo "make test        - Run tests"
-	@echo "make test-ci     - Run CI tests (same as GitHub Action)"
-	@echo "make coverage    - Generate coverage report"
-	@echo "make run ARGS='...' - Run the program with arguments"
-	@echo "   Example: make run ARGS='-v1 CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H -detailed'"
-	@echo "make clean       - Remove build artifacts"
-	@echo "make install     - Install to GOPATH/bin" 
+	@echo "make                 - Build the program"
+	@echo "make build           - Build the program"
+	@echo "make test            - Run all unit tests (pkg/...)"
+	@echo "make test-ci         - Run CI tests (same as GitHub Action)"
+	@echo "make coverage        - Generate HTML coverage report"
+	@echo "make coverage-check  - Enforce 100% coverage threshold"
+	@echo "make lint            - Run golangci-lint"
+	@echo "make run ARGS='...'  - Run the program with arguments"
+	@echo "   Example: make run ARGS='score CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H --format json'"
+	@echo "make clean           - Remove build artifacts and coverage files"
+	@echo "make install         - Install to GOPATH/bin" 

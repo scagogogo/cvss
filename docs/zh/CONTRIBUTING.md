@@ -43,6 +43,13 @@ CVSS Skills 是一个用于解析和计算 CVSS 3.x 向量的 Go 库。我们欢
 4. **运行测试**
    ```bash
    go test ./...
+   # 或使用 Makefile：
+   make test
+   ```
+
+   本项目对 `pkg/...` 强制要求 **100% 测试覆盖率**，所有贡献必须维持该门槛：
+   ```bash
+   make coverage-check   # CI 会强制执行
    ```
 
 5. **构建项目**
@@ -237,14 +244,25 @@ func TestCalculator_Calculate(t *testing.T) {
 ### 运行测试
 
 ```bash
-# 运行所有测试
+# 运行所有测试（4 个包）
 go test ./...
+# 或使用 Makefile：
+make test
+
+# 强制 100% 覆盖率门槛（CI 要求）
+make coverage-check
+
+# 生成 HTML 覆盖率报告
+make coverage
 
 # 运行特定包的测试
 go test ./pkg/cvss
+go test ./pkg/parser
+go test ./pkg/vector
+go test ./pkg/mock
 
-# 运行带覆盖率的测试
-go test -cover ./...
+# 运行 lint（与 CI 一致）
+make lint
 
 # 运行基准测试
 go test -bench=. ./...

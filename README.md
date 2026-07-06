@@ -7,6 +7,8 @@
 [![CI](https://github.com/scagogogo/cvss-skills/actions/workflows/ci.yml/badge.svg)](https://github.com/scagogogo/cvss-skills/actions/workflows/ci.yml)
 [![Release](https://github.com/scagogogo/cvss-skills/actions/workflows/release.yml/badge.svg)](https://github.com/scagogogo/cvss-skills/actions/workflows/release.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/scagogogo/cvss-skills)](https://goreportcard.com/report/github.com/scagogogo/cvss-skills)
+[![codecov](https://codecov.io/gh/scagogogo/cvss-skills/graph/badge.svg?token=CVSSSKILLS)](https://codecov.io/gh/scagogogo/cvss-skills)
+[![Coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/scagogogo/cvss-skills/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub Release](https://img.shields.io/github/v/release/scagogogo/cvss-skills)](https://github.com/scagogogo/cvss-skills/releases/latest)
 
