@@ -5,7 +5,7 @@ description: Complete reference for the cvss command-line tool — 30+ commands 
 
 # CLI Reference
 
-The `cvss` CLI provides **30+ commands** for parsing, scoring, validating, comparing, and analyzing CVSS vectors. Every command supports `--format json` for structured output.
+The `cvss` CLI provides **30+ commands** for parsing, scoring, validating, comparing, and analyzing CVSS vectors. Most commands support `--format json` for structured output (the exceptions are `completion`, which emits a shell script, `csv`, which is already tabular, and `json`, which is JSON by default).
 
 ## Installation
 
