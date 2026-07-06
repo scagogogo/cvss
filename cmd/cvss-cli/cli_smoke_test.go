@@ -27,6 +27,11 @@ func loAVec() string {
 	return vec("CVSS:3.1/", "AV:N/AC:L/PR:N/UI:N/S:U/", "C:H/I:H/A:L")
 }
 
+// hiVecTemporal is hiVec with temporal metrics appended.
+func hiVecTemporal() string {
+	return vec(hiVec(), "/E:F/RL:T/RC:C")
+}
+
 // runCommand executes the root command with the given args, capturing stdout
 // (including fmt.Println output, which bypasses cobra's writer).
 //
@@ -375,5 +380,64 @@ func TestCSVWriteCommand(t *testing.T) {
 	}
 	if !strings.Contains(out, hiVec()) {
 		t.Errorf("csv write output missing vector row: %q", out)
+	}
+}
+
+// TestCSVReadCommand verifies csv read parses a CSV stream from stdin and
+// echoes back the vectors.
+func TestCSVReadCommand(t *testing.T) {
+	csvText := runCommand(t, "csv", "write", hiVec())
+	out := runCommandWithStdin(t, csvText, "csv", "read", "-")
+	if !strings.Contains(out, hiVec()) {
+		t.Errorf("csv read output missing vector: %q", out)
+	}
+}
+
+// TestBaseOnlyCommand verifies base-only (alias strip) drops temporal metrics.
+func TestBaseOnlyCommand(t *testing.T) {
+	out := runCommand(t, "base-only", hiVecTemporal())
+	if !strings.Contains(out, hiVec()) {
+		t.Errorf("base-only output missing stripped base vector: %q", out)
+	}
+	if strings.Contains(out, "E:F") {
+		t.Errorf("base-only output should not contain temporal metrics: %q", out)
+	}
+}
+
+// TestStripAliasCommand verifies strip works as an alias for base-only.
+func TestStripAliasCommand(t *testing.T) {
+	out := runCommand(t, "strip", hiVecTemporal())
+	if !strings.Contains(out, hiVec()) {
+		t.Errorf("strip output missing stripped base vector: %q", out)
+	}
+}
+
+// TestBatchScoreCommand verifies batch score reads vectors from stdin and
+// scores each.
+func TestBatchScoreCommand(t *testing.T) {
+	stdin := hiVec() + "\n" + hiVecTemporal() + "\n"
+	out := runCommandWithStdin(t, stdin, "batch", "score", "-")
+	if !strings.Contains(out, "9.8") {
+		t.Errorf("batch score output missing 9.8: %q", out)
+	}
+	if !strings.Contains(out, hiVec()) {
+		t.Errorf("batch score output missing vector: %q", out)
+	}
+}
+
+// TestBatchValidateCommand verifies batch validate reads vectors from stdin.
+func TestBatchValidateCommand(t *testing.T) {
+	stdin := hiVec() + "\n"
+	out := runCommandWithStdin(t, stdin, "batch", "validate", "-")
+	if !strings.Contains(out, hiVec()) {
+		t.Errorf("batch validate output missing vector: %q", out)
+	}
+}
+
+// TestCompletionCommand verifies completion emits a shell script.
+func TestCompletionCommand(t *testing.T) {
+	out := runCommand(t, "completion", "bash")
+	if !strings.Contains(out, "completion") {
+		t.Errorf("completion output missing completion keyword: %q", out)
 	}
 }

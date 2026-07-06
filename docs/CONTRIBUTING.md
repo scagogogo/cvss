@@ -52,15 +52,15 @@ git checkout -b fix/issue-description
 
 ### 4. Test Your Changes
 
-This project enforces **100% test coverage** on `pkg/...`. All contributions must maintain this threshold.
+This project enforces **100% test coverage** on `pkg/...`. All contributions must maintain this threshold. The `cmd/cvss-cli` package is covered by smoke tests (no coverage threshold).
 
 ```bash
-# Run all tests (4 packages)
+# Run all tests (4 pkg packages + CLI smoke tests)
 go test ./...
 # or via Makefile:
 make test
 
-# Enforce 100% coverage threshold (CI requires this)
+# Enforce 100% coverage threshold on pkg/... (CI requires this)
 make coverage-check
 
 # Generate an HTML coverage report
@@ -71,6 +71,7 @@ go test ./pkg/parser
 go test ./pkg/cvss
 go test ./pkg/vector
 go test ./pkg/mock
+go test ./cmd/cvss-cli      # CLI smoke tests
 
 # Lint (same as CI)
 make lint
