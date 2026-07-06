@@ -8,10 +8,10 @@ build:
 	@echo "Building cvss-cli..."
 	@go build -o bin/cvss-cli ./cmd/cvss-cli/
 
-# 运行测试（全部 4 个包）
+# 运行测试（4 个 pkg 包 + CLI）
 test:
 	@echo "Running tests..."
-	@go test ./pkg/...
+	@go test ./pkg/... ./cmd/...
 
 # 运行程序
 run:
@@ -32,6 +32,7 @@ install:
 test-ci:
 	@echo "Running CI tests..."
 	@go test -v -race -coverprofile=coverage.txt -covermode=atomic ./pkg/...
+	@go test -v -race ./cmd/...
 	@echo "Building all examples..."
 	@find ./examples -type f -name "main.go" -exec dirname {} \; | while read dir; do \
 		echo "Building example: $$dir"; \
@@ -75,7 +76,7 @@ help:
 	@echo ""
 	@echo "make                 - Build the program"
 	@echo "make build           - Build the program"
-	@echo "make test            - Run all unit tests (pkg/...)"
+	@echo "make test            - Run all unit tests (pkg/... and cmd/...)"
 	@echo "make test-ci         - Run CI tests (same as GitHub Action)"
 	@echo "make coverage        - Generate HTML coverage report"
 	@echo "make coverage-check  - Enforce 100% coverage threshold"
