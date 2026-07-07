@@ -14,7 +14,8 @@ description: The four sentinel errors exported from pkg/cvss/errors.go — ErrNi
 `errors.go` declares four package-level sentinel error variables so callers can match them with `errors.Is` instead of string comparison. `ErrNilReceiver` is returned throughout the SDK (the `With*` method-chain helpers in `pkg/cvss/with_method.go`, plus `batch.go`, `score_range.go`, `accessor.go`, `conversion.go` and `impact.go`). The other three — `ErrIncompleteBaseMetrics`, `ErrUnsupportedVersion`, `ErrInvalidMetricValue` — are exported as stable sentinels for callers to use/compare against; note that the SDK's own `Check()` and `Calculator` currently report equivalent conditions via `fmt.Errorf` strings rather than wrapping these sentinels, so `errors.Is` on those code paths will not match them. They are intended for application-level error classification and for any code that wants to wrap/return a canonical CVSS error.
 
 ```go
-err := cv.Score()
+var cv *cvss.Cvss3x // nil
+_, err := cv.WithAVMethod('N')
 if errors.Is(err, cvss.ErrNilReceiver) {
     // handle nil-receiver case
 }
