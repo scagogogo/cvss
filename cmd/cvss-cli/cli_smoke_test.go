@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/spf13/pflag"
 )
 
 // vec builds a CVSS vector string by concatenating parts instead of writing
@@ -37,6 +39,29 @@ func hiVecTemporal() string {
 	return vec(hiVec(), "/E:F/RL:T/RC:C")
 }
 
+// hiVecEnvironmental is hiVec with environmental metrics appended.
+func hiVecEnvironmental() string {
+	return vec(hiVec(), "/CR:H/IR:H/AR:H")
+}
+
+// resetFlags restores every command's flags to their default values.
+//
+// cobra parses flags into the persistent *flag.FlagSet of the target command,
+// and those values survive across Execute calls — so a test that sets
+// --breakdown leaves showBreakdown=true for the next test. Resetting before
+// each run keeps flag-dependent tests isolated.
+func resetFlags() {
+	for _, cmd := range rootCmd.Commands() {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			_ = f.Value.Set(f.DefValue)
+		})
+	}
+	// rootCmd's own flags (e.g. --version) too.
+	rootCmd.Flags().VisitAll(func(f *pflag.Flag) {
+		_ = f.Value.Set(f.DefValue)
+	})
+}
+
 // runCommand executes the root command with the given args, capturing stdout
 // (including fmt.Println output, which bypasses cobra's writer).
 //
@@ -45,6 +70,9 @@ func hiVecTemporal() string {
 // only success paths are exercised here.
 func runCommand(t *testing.T, args ...string) string {
 	t.Helper()
+
+	// Reset flag state left over from prior tests (see resetFlags).
+	resetFlags()
 
 	// Save and restore os.Stdout. We replace it with a pipe so that direct
 	// fmt.Println calls (which bypass cobra's writer) are captured.
@@ -109,6 +137,69 @@ func TestScoreCommand_JSON(t *testing.T) {
 	}
 	if !strings.Contains(out, `"severity"`) {
 		t.Errorf("json output missing severity key: %q", out)
+	}
+}
+
+// TestScoreCommand_Breakdown verifies the --breakdown flag prints per-metric
+// score details, exercising printBreakdown and printMetricScore.
+func TestScoreCommand_Breakdown(t *testing.T) {
+	out := runCommand(t, "score", "--breakdown", hiVec())
+	if !strings.Contains(out, "Score Breakdown") {
+		t.Errorf("breakdown output missing 'Score Breakdown': %q", out)
+	}
+	if !strings.Contains(out, "Base Metrics") {
+		t.Errorf("breakdown output missing 'Base Metrics': %q", out)
+	}
+	// A per-metric line like "AV:N = 0.8500" should appear.
+	if !strings.Contains(out, "AV:N =") {
+		t.Errorf("breakdown output missing AV metric line: %q", out)
+	}
+}
+
+// TestScoreCommand_BreakdownTemporal verifies --breakdown on a temporal vector
+// surfaces the Temporal Metrics section.
+func TestScoreCommand_BreakdownTemporal(t *testing.T) {
+	out := runCommand(t, "score", "--breakdown", hiVecTemporal())
+	if !strings.Contains(out, "Temporal Metrics") {
+		t.Errorf("breakdown output missing 'Temporal Metrics': %q", out)
+	}
+	if !strings.Contains(out, "E:F =") {
+		t.Errorf("breakdown output missing E metric line: %q", out)
+	}
+}
+
+// TestScoreCommand_BreakdownEnvironmental verifies --breakdown on an
+// environmental vector surfaces the Environmental Metrics section.
+func TestScoreCommand_BreakdownEnvironmental(t *testing.T) {
+	out := runCommand(t, "score", "--breakdown", hiVecEnvironmental())
+	if !strings.Contains(out, "Environmental Metrics") {
+		t.Errorf("breakdown output missing 'Environmental Metrics': %q", out)
+	}
+	if !strings.Contains(out, "CR:H =") {
+		t.Errorf("breakdown output missing CR metric line: %q", out)
+	}
+}
+
+// TestScoreCommand_All verifies the --all flag prints the base score with
+// severity, exercising the showAll branch.
+func TestScoreCommand_All(t *testing.T) {
+	out := runCommand(t, "score", "--all", hiVec())
+	if !strings.Contains(out, "9.8") {
+		t.Errorf("--all output missing base 9.8: %q", out)
+	}
+	if !strings.Contains(out, "Critical") {
+		t.Errorf("--all output missing Critical severity: %q", out)
+	}
+}
+
+// TestScoreCommand_AllJSON verifies --all combines with --format json.
+func TestScoreCommand_AllJSON(t *testing.T) {
+	out := runCommand(t, "score", "--all", "--format", "json", hiVec())
+	if !strings.Contains(out, `"BaseScore"`) {
+		t.Errorf("--all json output missing BaseScore: %q", out)
+	}
+	if !strings.Contains(out, `"BaseSeverity"`) {
+		t.Errorf("--all json output missing BaseSeverity: %q", out)
 	}
 }
 
@@ -188,6 +279,9 @@ func TestEnumerateCommand(t *testing.T) {
 // when given "-" or no file argument).
 func runCommandWithStdin(t *testing.T, stdinText string, args ...string) string {
 	t.Helper()
+
+	// Reset flag state left over from prior tests (see resetFlags).
+	resetFlags()
 
 	origOut := os.Stdout
 	origIn := os.Stdin
