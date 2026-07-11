@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -536,6 +537,67 @@ func TestMarshalJSON_ErrorBranch(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "JSON encoding error") {
 		t.Errorf("marshalJSON output missing 'JSON encoding error': %q", buf.String())
+	}
+}
+
+// errReader returns a short payload on the first reads, then a persistent
+// non-EOF error — which bufio.Scanner propagates to scanner.Err().
+type errReader struct {
+	remaining int
+	err       error
+}
+
+func (e *errReader) Read(p []byte) (int, error) {
+	if e.remaining > 0 {
+		e.remaining--
+		p[0] = '\n'
+		return 1, nil
+	}
+	return 0, e.err
+}
+
+// TestReadLinesFrom_ScannerError verifies readLinesFrom's dief path is hit
+// when the underlying reader errors mid-scan. This branch is unreachable via
+// the CLI (os.Stdin/os.Open don't error mid-line in practice), so it is
+// exercised directly against the testable readLinesFrom helper.
+func TestReadLinesFrom_ScannerError(t *testing.T) {
+	t.Helper()
+
+	origExit := exitFunc
+	exitFunc = func(code int) { panic(struct{ code int }{code}) }
+	defer func() { exitFunc = origExit }()
+
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+
+	exited := false
+	func() {
+		defer func() {
+			if rv := recover(); rv != nil {
+				exited = true
+			}
+		}()
+		_ = readLinesFrom(&errReader{remaining: 2, err: fmt.Errorf("simulated I/O error")})
+	}()
+
+	os.Stderr = origStderr
+	w.Close()
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	r.Close()
+
+	if !exited {
+		t.Fatalf("readLinesFrom should have called dief on scanner error, but returned normally")
+	}
+	if !strings.Contains(buf.String(), "Error reading input") {
+		t.Errorf("readLinesFrom output missing 'Error reading input': %q", buf.String())
+	}
+	if !strings.Contains(buf.String(), "simulated I/O error") {
+		t.Errorf("readLinesFrom output should propagate underlying error: %q", buf.String())
 	}
 }
 

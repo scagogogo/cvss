@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -48,6 +49,26 @@ func mustGetString(cmd *cobra.Command, name string) string {
 	return strings.ToUpper(val)
 }
 
+// readLinesFrom reads lines from r. Lines starting with "#" and blank lines
+// are skipped. On scanner error, prints to stderr and exits with code 1.
+//
+// This is the testable core of readLines, separated so tests can inject a
+// reader that errors mid-scan (os.Stdin and os.Open cannot be made to do so).
+func readLinesFrom(r io.Reader) []string {
+	var lines []string
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" && !strings.HasPrefix(line, "#") {
+			lines = append(lines, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		dief("Error reading input: %v\n", err)
+	}
+	return lines
+}
+
 // readLines reads lines from a file or stdin. Lines starting with "#"
 // and blank lines are skipped. The special arg "-" means stdin.
 func readLines(cmd *cobra.Command, args []string) []string {
@@ -62,17 +83,5 @@ func readLines(cmd *cobra.Command, args []string) []string {
 		defer f.Close()
 		r = f
 	}
-
-	var lines []string
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" && !strings.HasPrefix(line, "#") {
-			lines = append(lines, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		dief("Error reading input: %v\n", err)
-	}
-	return lines
+	return readLinesFrom(r)
 }
