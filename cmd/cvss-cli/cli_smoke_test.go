@@ -332,6 +332,96 @@ func runCommandWithStdin(t *testing.T, stdinText string, args ...string) string 
 	return buf.String()
 }
 
+// runCommandExpectError runs the root command with args that are expected to
+// trigger a die/dief error path. It substitutes exitFunc with a panic-on-call
+// so the error path can be recovered instead of killing the test process,
+// captures combined stdout+stderr, and returns the captured output.
+//
+// The test fails if the command does NOT trigger an exit (i.e. completes
+// normally), because that means the error path was not exercised as intended.
+func runCommandExpectError(t *testing.T, args ...string) string {
+	t.Helper()
+
+	// Reset flag state left over from prior tests (see resetFlags).
+	resetFlags()
+
+	// Substitute exitFunc so die/dief panic instead of killing the process.
+	// The panic carries an exit-code sentinel so we can distinguish an
+	// intentional exit from an unexpected panic.
+	origExit := exitFunc
+	exitFunc = func(code int) { panic(struct{ code int }{code}) }
+	defer func() { exitFunc = origExit }()
+
+	origOut := os.Stdout
+	origErr := os.Stderr
+	// Use a single pipe for combined stdout+stderr so die/dief's Fprintf to
+	// os.Stderr is captured alongside cobra's own output.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	os.Stderr = w
+
+	silenced := rootCmd.SilenceErrors
+	rootCmd.SilenceErrors = true
+	rootCmd.SetErr(io.Discard)
+	rootCmd.SetArgs(args)
+
+	var buf bytes.Buffer
+	copyDone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&buf, r)
+		close(copyDone)
+	}()
+
+	exited := false
+	func() {
+		defer func() {
+			if rv := recover(); rv != nil {
+				// An exit was triggered — this is the expected error path.
+				exited = true
+			}
+		}()
+		_ = rootCmd.Execute()
+	}()
+
+	os.Stdout = origOut
+	os.Stderr = origErr
+	w.Close()
+	<-copyDone
+	r.Close()
+
+	rootCmd.SilenceErrors = silenced
+	rootCmd.SetArgs(nil)
+
+	if !exited {
+		t.Fatalf("expected error exit for args %v, but command completed normally; output: %q", args, buf.String())
+	}
+	return buf.String()
+}
+
+// TestScoreCommand_InvalidVector verifies the score command's parse-error
+// branch: an invalid vector triggers dief("Parse error: ...") rather than
+// producing a score.
+func TestScoreCommand_InvalidVector(t *testing.T) {
+	out := runCommandExpectError(t, "score", "INVALID")
+	if !strings.Contains(out, "Parse error") {
+		t.Errorf("invalid-vector output missing 'Parse error': %q", out)
+	}
+	if !strings.Contains(out, "invalid magic head") {
+		t.Errorf("invalid-vector output missing 'invalid magic head': %q", out)
+	}
+}
+
+// TestParseCommand_InvalidVector verifies the parse command's parse-error branch.
+func TestParseCommand_InvalidVector(t *testing.T) {
+	out := runCommandExpectError(t, "parse", "INVALID")
+	if !strings.Contains(out, "Parse error") {
+		t.Errorf("invalid-vector output missing 'Parse error': %q", out)
+	}
+}
+
 // TestVersionFlag verifies the --version flag outputs a version.
 func TestVersionFlag(t *testing.T) {
 	out := runCommand(t, "--version")
