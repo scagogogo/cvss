@@ -10,16 +10,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// exitFunc terminates the process with the given exit code. It is a package-level
+// variable so tests can substitute it (e.g. with a panic) to exercise error paths
+// that normally call os.Exit and would otherwise kill the test process.
+//
+// Production code MUST NOT reassign exitFunc; only the test harness does.
+var exitFunc = func(code int) {
+	os.Exit(code)
+}
+
 // die prints msg to stderr and exits with code 1.
 func die(msg string) {
 	fmt.Fprintln(os.Stderr, msg)
-	os.Exit(1)
+	exitFunc(1)
 }
 
 // dief prints a formatted message to stderr and exits with code 1.
 func dief(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format, args...)
-	os.Exit(1)
+	exitFunc(1)
 }
 
 // marshalJSON returns the JSON encoding of v, indented with two spaces.
