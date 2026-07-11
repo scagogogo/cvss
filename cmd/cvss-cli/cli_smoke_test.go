@@ -422,6 +422,64 @@ func TestParseCommand_InvalidVector(t *testing.T) {
 	}
 }
 
+// TestPresetCommand_UnknownSeverity verifies preset rejects an unknown severity.
+func TestPresetCommand_UnknownSeverity(t *testing.T) {
+	out := runCommandExpectError(t, "preset", "bogus")
+	if !strings.Contains(out, "Unknown severity") {
+		t.Errorf("preset output missing 'Unknown severity': %q", out)
+	}
+	if !strings.Contains(out, "bogus") {
+		t.Errorf("preset output should echo the bad value 'bogus': %q", out)
+	}
+}
+
+// TestBuildCommand_InvalidMetricValue verifies build rejects an invalid metric
+// value (dief "Build error").
+func TestBuildCommand_InvalidMetricValue(t *testing.T) {
+	out := runCommandExpectError(t, "build",
+		"--AV", "Z", // Z is not a valid AttackVector value
+		"--AC", "L", "--PR", "N", "--UI", "N",
+		"--S", "U", "--C", "H", "--I", "H", "--A", "H",
+	)
+	if !strings.Contains(out, "Build error") {
+		t.Errorf("build output missing 'Build error': %q", out)
+	}
+}
+
+// TestDescribeCommand_InvalidVector verifies describe's parse-error branch.
+func TestDescribeCommand_InvalidVector(t *testing.T) {
+	out := runCommandExpectError(t, "describe", "INVALID")
+	if !strings.Contains(out, "Parse error") {
+		t.Errorf("describe output missing 'Parse error': %q", out)
+	}
+}
+
+// TestGetCommand_InvalidVector verifies get's parse-error branch.
+func TestGetCommand_InvalidVector(t *testing.T) {
+	out := runCommandExpectError(t, "get", "INVALID", "AV")
+	if !strings.Contains(out, "Parse error") {
+		t.Errorf("get output missing 'Parse error': %q", out)
+	}
+}
+
+// TestSeverityCommand_InvalidScore verifies severity rejects a non-numeric score.
+func TestSeverityCommand_InvalidScore(t *testing.T) {
+	out := runCommandExpectError(t, "severity", "not-a-number")
+	if !strings.Contains(out, "Invalid score") {
+		t.Errorf("severity output missing 'Invalid score': %q", out)
+	}
+}
+
+// TestCSVWriteCommand_NoVectors verifies csv write dies when given no vectors.
+// This exercises the die() helper (distinct from dief), which csv.go calls when
+// the input yields zero valid vectors.
+func TestCSVWriteCommand_NoVectors(t *testing.T) {
+	out := runCommandExpectError(t, "csv", "write")
+	if !strings.Contains(out, "No valid vectors to write") {
+		t.Errorf("csv write output missing 'No valid vectors to write': %q", out)
+	}
+}
+
 // TestVersionFlag verifies the --version flag outputs a version.
 func TestVersionFlag(t *testing.T) {
 	out := runCommand(t, "--version")
