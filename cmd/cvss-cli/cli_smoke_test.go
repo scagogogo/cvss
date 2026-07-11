@@ -492,6 +492,53 @@ func TestSortCommand_FileNotFound(t *testing.T) {
 	}
 }
 
+// TestMarshalJSON_ErrorBranch verifies marshalJSON's dief path is hit when
+// json.MarshalIndent returns an error. A channel value cannot be JSON-encoded,
+// so marshalJSON must call dief("JSON encoding error: ...").
+//
+// This is a direct unit test of the unexported marshalJSON helper — possible
+// because the test file is in package main. The CLI's own command paths only
+// ever pass SDK structs/maps to marshalJSON, which always encode successfully,
+// so this branch is unreachable via any CLI invocation.
+func TestMarshalJSON_ErrorBranch(t *testing.T) {
+	t.Helper()
+
+	origExit := exitFunc
+	exitFunc = func(code int) { panic(struct{ code int }{code}) }
+	defer func() { exitFunc = origExit }()
+
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+
+	exited := false
+	func() {
+		defer func() {
+			if rv := recover(); rv != nil {
+				exited = true
+			}
+		}()
+		// A channel value triggers json.MarshalIndent to return an error.
+		_ = marshalJSON(make(chan int))
+	}()
+
+	os.Stderr = origStderr
+	w.Close()
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	r.Close()
+
+	if !exited {
+		t.Fatalf("marshalJSON(chan) should have called dief, but it returned normally")
+	}
+	if !strings.Contains(buf.String(), "JSON encoding error") {
+		t.Errorf("marshalJSON output missing 'JSON encoding error': %q", buf.String())
+	}
+}
+
 // TestVersionFlag verifies the --version flag outputs a version.
 func TestVersionFlag(t *testing.T) {
 	out := runCommand(t, "--version")
