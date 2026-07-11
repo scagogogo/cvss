@@ -480,6 +480,18 @@ func TestCSVWriteCommand_NoVectors(t *testing.T) {
 	}
 }
 
+// TestSortCommand_FileNotFound verifies sort dies when the given file does not
+// exist, covering readLines' os.Open failure branch.
+func TestSortCommand_FileNotFound(t *testing.T) {
+	out := runCommandExpectError(t, "sort", "/nonexistent/path/to/file.txt")
+	if !strings.Contains(out, "Cannot open file") {
+		t.Errorf("sort output missing 'Cannot open file': %q", out)
+	}
+	if !strings.Contains(out, "no such file") {
+		t.Errorf("sort output missing 'no such file': %q", out)
+	}
+}
+
 // TestVersionFlag verifies the --version flag outputs a version.
 func TestVersionFlag(t *testing.T) {
 	out := runCommand(t, "--version")
