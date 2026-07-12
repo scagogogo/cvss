@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -490,6 +491,29 @@ func TestSortCommand_FileNotFound(t *testing.T) {
 	}
 	if !strings.Contains(out, "no such file") {
 		t.Errorf("sort output missing 'no such file': %q", out)
+	}
+}
+
+// TestSortCommand_FromFile verifies sort reads vectors from an actual file,
+// covering readLines' os.Open success path (defer f.Close() / r = f lines
+// that stdin and file-not-found tests never reach).
+func TestSortCommand_FromFile(t *testing.T) {
+	// Write a temp file with two vectors in non-sorted order.
+	tmpFile := filepath.Join(t.TempDir(), "vectors.txt")
+	content := loAVec() + "\n" + hiVec() + "\n"
+	if err := os.WriteFile(tmpFile, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	out := runCommand(t, "sort", tmpFile)
+	// Descending default: hiVec (9.8) should appear before loAVec (9.4).
+	hi := strings.Index(out, hiVec())
+	lo := strings.Index(out, loAVec())
+	if hi < 0 || lo < 0 {
+		t.Fatalf("sort from file missing vectors: %q", out)
+	}
+	if hi > lo {
+		t.Errorf("sort from file not descending (hi=%d should come before lo=%d): %q", hi, lo, out)
 	}
 }
 
